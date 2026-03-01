@@ -67,7 +67,9 @@ tr:nth-child(even) { background: #1a1a1a; }
 <tr>
 <th>Symbol</th>
 <th>1h</th>
+<th>Prev1h</th>
 <th>4h</th>
+<th>Prev4h</th>
 <th>OI</th>
 <th>Liquidation</th>
 <th>Vol</th>
@@ -102,24 +104,29 @@ async function fetchData() {
 
         try {
 
-            // ---------- PRICE DATA ----------
+            // ---------- 1H ----------
             let k1 = await fetch(
-                `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=1h&limit=2`
+                `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=1h&limit=3`
             ).then(res => res.json());
 
-            let c1 = parseFloat(k1[1][4]);
-            let c2 = parseFloat(k1[0][4]);
+            let c1 = parseFloat(k1[2][4]);
+            let c2 = parseFloat(k1[1][4]);
+            let c3 = parseFloat(k1[0][4]);
 
             let change1h = ((c1 - c2) / c2) * 100;
+            let prev1h = ((c2 - c3) / c3) * 100;
 
+            // ---------- 4H ----------
             let k4 = await fetch(
-                `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=4h&limit=2`
+                `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=4h&limit=3`
             ).then(res => res.json());
 
-            let d1 = parseFloat(k4[1][4]);
-            let d2 = parseFloat(k4[0][4]);
+            let d1 = parseFloat(k4[2][4]);
+            let d2 = parseFloat(k4[1][4]);
+            let d3 = parseFloat(k4[0][4]);
 
             let change4h = ((d1 - d2) / d2) * 100;
+            let prev4h = ((d2 - d3) / d3) * 100;
 
             // ---------- OPEN INTEREST ----------
             let oiData = await fetch(
@@ -149,37 +156,28 @@ async function fetchData() {
                 oiClass = "bear";
             }
 
-            // ---------- LIQUIDATIONS ----------
-            let liqData = await fetch(
-                `https://fapi.binance.com/fapi/v1/allForceOrders?symbol=${symbol}&limit=20`
-            ).then(res => res.json());
-
-            let longLiq = 0;
-            let shortLiq = 0;
-
-            liqData.forEach(order => {
-                let qty = parseFloat(order.origQty);
-
-                if (order.side === "SELL") longLiq += qty;
-                if (order.side === "BUY") shortLiq += qty;
-            });
-
+            // ---------- LIQUIDATION ESTIMATION ----------
             let liqText = "Low";
             let liqClass = "liqNeutral";
 
-            if (shortLiq > longLiq * 1.5) {
+            if (change1h > 1 && oiChange < -0.05) {
                 liqText = "🔥 Shorts Squeezed";
                 liqClass = "liqBull";
             }
-            else if (longLiq > shortLiq * 1.5) {
+            else if (change1h < -1 && oiChange < -0.05) {
                 liqText = "🔥 Longs Wiped";
                 liqClass = "liqBear";
+            }
+            else if (Math.abs(change1h) > 1 && oiChange > 0.05) {
+                liqText = "⚠️ Possible Squeeze";
             }
 
             tableData.push({
                 symbol,
                 change1h,
+                prev1h,
                 change4h,
+                prev4h,
                 oiTrend,
                 oiClass,
                 liqText,
@@ -218,21 +216,15 @@ function renderTable() {
                 ${row.symbol}
             </td>
 
-            <td class="${row.change1h >= 0 ? 'positive':'negative'}">
-                ${row.change1h.toFixed(2)}%
-            </td>
+            <td class="${row.change1h >= 0 ? 'positive':'negative'}">${row.change1h.toFixed(2)}%</td>
+            <td class="${row.prev1h >= 0 ? 'positive':'negative'}">${row.prev1h.toFixed(2)}%</td>
 
-            <td class="${row.change4h >= 0 ? 'positive':'negative'}">
-                ${row.change4h.toFixed(2)}%
-            </td>
+            <td class="${row.change4h >= 0 ? 'positive':'negative'}">${row.change4h.toFixed(2)}%</td>
+            <td class="${row.prev4h >= 0 ? 'positive':'negative'}">${row.prev4h.toFixed(2)}%</td>
 
-            <td class="${row.oiClass}">
-                ${row.oiTrend}
-            </td>
+            <td class="${row.oiClass}">${row.oiTrend}</td>
 
-            <td class="${row.liqClass}">
-                ${row.liqText}
-            </td>
+            <td class="${row.liqClass}">${row.liqText}</td>
 
             <td>${volFormatted}</td>
         `;
