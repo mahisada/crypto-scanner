@@ -32,9 +32,9 @@ table {
 }
 
 th, td {
-    padding: 10px;
+    padding: 8px;
     text-align: center;
-    font-size: 13px;
+    font-size: 12px;
 }
 
 th { background: #222; }
@@ -46,7 +46,10 @@ tr:nth-child(even) { background: #1a1a1a; }
 
 .bull { color: #00ff9c; font-weight: bold; }
 .bear { color: #ff4d4d; font-weight: bold; }
-.neutral { color: #f1c40f; }
+
+.liqBull { color: #00ff9c; font-weight: bold; }
+.liqBear { color: #ff4d4d; font-weight: bold; }
+.liqNeutral { color: #f1c40f; }
 
 </style>
 </head>
@@ -64,12 +67,10 @@ tr:nth-child(even) { background: #1a1a1a; }
 <tr>
 <th>Symbol</th>
 <th>1h</th>
-<th>Prev1h</th>
 <th>4h</th>
-<th>Prev4h</th>
-<th>24h</th>
+<th>OI</th>
+<th>Liquidation</th>
 <th>Vol</th>
-<th>OI Trend</th>
 </tr>
 </thead>
 <tbody></tbody>
@@ -90,41 +91,35 @@ async function fetchData() {
     let usdtPairs = ticker
         .filter(c => c.symbol.endsWith("USDT"))
         .sort((a,b) => parseFloat(b.quoteVolume) - parseFloat(a.quoteVolume))
-        .slice(0, 30);
+        .slice(0, 20);
 
     tableData = [];
 
     await Promise.all(usdtPairs.map(async coin => {
 
         let symbol = coin.symbol;
-        let change24 = parseFloat(coin.priceChangePercent);
         let volume = parseFloat(coin.quoteVolume);
 
         try {
 
-            // ---------- 1H ----------
+            // ---------- PRICE DATA ----------
             let k1 = await fetch(
-                `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=1h&limit=3`
+                `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=1h&limit=2`
             ).then(res => res.json());
 
-            let c1 = parseFloat(k1[2][4]);
-            let c2 = parseFloat(k1[1][4]);
-            let c3 = parseFloat(k1[0][4]);
+            let c1 = parseFloat(k1[1][4]);
+            let c2 = parseFloat(k1[0][4]);
 
             let change1h = ((c1 - c2) / c2) * 100;
-            let prev1h = ((c2 - c3) / c3) * 100;
 
-            // ---------- 4H ----------
             let k4 = await fetch(
-                `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=4h&limit=3`
+                `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=4h&limit=2`
             ).then(res => res.json());
 
-            let d1 = parseFloat(k4[2][4]);
-            let d2 = parseFloat(k4[1][4]);
-            let d3 = parseFloat(k4[0][4]);
+            let d1 = parseFloat(k4[1][4]);
+            let d2 = parseFloat(k4[0][4]);
 
             let change4h = ((d1 - d2) / d2) * 100;
-            let prev4h = ((d2 - d3) / d3) * 100;
 
             // ---------- OPEN INTEREST ----------
             let oiData = await fetch(
@@ -132,51 +127,68 @@ async function fetchData() {
             ).then(res => res.json());
 
             let currentOI = parseFloat(oiData.openInterest);
-
             let prevOI = oiCache[symbol];
+
             oiCache[symbol] = currentOI;
 
-            let oiChangePercent = 0;
+            let oiChange = 0;
 
             if (prevOI) {
-                oiChangePercent = ((currentOI - prevOI) / prevOI) * 100;
+                oiChange = ((currentOI - prevOI) / prevOI) * 100;
             }
 
-            // ---------- OI TREND ----------
             let oiTrend = "Neutral";
-            let oiClass = "neutral";
+            let oiClass = "";
 
-            let threshold = 0.05; // ignore tiny noise
-
-            if (change1h > 0 && oiChangePercent > threshold) {
+            if (change1h > 0 && oiChange > 0.05) {
                 oiTrend = "Strong Buying";
                 oiClass = "bull";
             }
-            else if (change1h < 0 && oiChangePercent > threshold) {
+            else if (change1h < 0 && oiChange > 0.05) {
                 oiTrend = "Strong Selling";
                 oiClass = "bear";
             }
-            else if (change1h > 0 && oiChangePercent < -threshold) {
-                oiTrend = "Short Covering";
+
+            // ---------- LIQUIDATIONS ----------
+            let liqData = await fetch(
+                `https://fapi.binance.com/fapi/v1/allForceOrders?symbol=${symbol}&limit=20`
+            ).then(res => res.json());
+
+            let longLiq = 0;
+            let shortLiq = 0;
+
+            liqData.forEach(order => {
+                let qty = parseFloat(order.origQty);
+
+                if (order.side === "SELL") longLiq += qty;
+                if (order.side === "BUY") shortLiq += qty;
+            });
+
+            let liqText = "Low";
+            let liqClass = "liqNeutral";
+
+            if (shortLiq > longLiq * 1.5) {
+                liqText = "🔥 Shorts Squeezed";
+                liqClass = "liqBull";
             }
-            else if (change1h < 0 && oiChangePercent < -threshold) {
-                oiTrend = "Long Liquidation";
+            else if (longLiq > shortLiq * 1.5) {
+                liqText = "🔥 Longs Wiped";
+                liqClass = "liqBear";
             }
 
             tableData.push({
                 symbol,
                 change1h,
-                prev1h,
                 change4h,
-                prev4h,
-                change24,
-                volume,
                 oiTrend,
-                oiClass
+                oiClass,
+                liqText,
+                liqClass,
+                volume
             });
 
         } catch (err) {
-            console.log("Error:", symbol);
+            console.log(symbol, err);
         }
 
     }));
@@ -206,17 +218,23 @@ function renderTable() {
                 ${row.symbol}
             </td>
 
-            <td class="${row.change1h >= 0 ? 'positive':'negative'}">${row.change1h.toFixed(2)}%</td>
-            <td class="${row.prev1h >= 0 ? 'positive':'negative'}">${row.prev1h.toFixed(2)}%</td>
+            <td class="${row.change1h >= 0 ? 'positive':'negative'}">
+                ${row.change1h.toFixed(2)}%
+            </td>
 
-            <td class="${row.change4h >= 0 ? 'positive':'negative'}">${row.change4h.toFixed(2)}%</td>
-            <td class="${row.prev4h >= 0 ? 'positive':'negative'}">${row.prev4h.toFixed(2)}%</td>
+            <td class="${row.change4h >= 0 ? 'positive':'negative'}">
+                ${row.change4h.toFixed(2)}%
+            </td>
 
-            <td class="${row.change24 >= 0 ? 'positive':'negative'}">${row.change24.toFixed(2)}%</td>
+            <td class="${row.oiClass}">
+                ${row.oiTrend}
+            </td>
+
+            <td class="${row.liqClass}">
+                ${row.liqText}
+            </td>
 
             <td>${volFormatted}</td>
-
-            <td class="${row.oiClass}">${row.oiTrend}</td>
         `;
 
         tbody.appendChild(tr);
@@ -231,10 +249,7 @@ function openChart(symbol) {
 }
 
 
-// Auto refresh
 setInterval(fetchData, 30000);
-
-// Initial load
 fetchData();
 
 </script>
