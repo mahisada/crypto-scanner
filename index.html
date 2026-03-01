@@ -70,6 +70,7 @@ tr:nth-child(even) { background: #1a1a1a; }
 <th>Prev1h</th>
 <th>4h</th>
 <th>Prev4h</th>
+<th>24h</th>
 <th>OI</th>
 <th>Liquidation</th>
 <th>Vol</th>
@@ -101,6 +102,7 @@ async function fetchData() {
 
         let symbol = coin.symbol;
         let volume = parseFloat(coin.quoteVolume);
+        let change24 = parseFloat(coin.priceChangePercent);
 
         try {
 
@@ -178,6 +180,7 @@ async function fetchData() {
                 prev1h,
                 change4h,
                 prev4h,
+                change24,
                 oiTrend,
                 oiClass,
                 liqText,
@@ -221,6 +224,8 @@ function renderTable() {
 
             <td class="${row.change4h >= 0 ? 'positive':'negative'}">${row.change4h.toFixed(2)}%</td>
             <td class="${row.prev4h >= 0 ? 'positive':'negative'}">${row.prev4h.toFixed(2)}%</td>
+
+            <td class="${row.change24 >= 0 ? 'positive':'negative'}">${row.change24.toFixed(2)}%</td>
 
             <td class="${row.oiClass}">${row.oiTrend}</td>
 
