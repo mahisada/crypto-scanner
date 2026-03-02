@@ -216,6 +216,11 @@ let scalp="LOW",scalpClass="low";
 if(score>75){scalp="🔥 HIGH";scalpClass="high";}
 else if(score>60){scalp="⚡ MED";scalpClass="medium";}
 
+    // FILTER DEAD COINS
+if (Math.abs(change1h) < 0.05 && atr < 0.2) {
+    return;
+}
+    
 tableData.push({
 symbol,change1h,prev1h,change4h,prev4h,
 change24,oiTrend,oiClass,liqText,
