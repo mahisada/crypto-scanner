@@ -131,7 +131,7 @@ const ticker=await fetch('https://fapi.binance.com/fapi/v1/ticker/24hr')
 let usdtPairs=ticker
 .filter(c=>c.symbol.endsWith("USDT"))
 .sort((a,b)=>parseFloat(b.quoteVolume)-parseFloat(a.quoteVolume))
-.slice(0,20);
+.slice(0,25);
 
 tableData=[];
 
