@@ -169,6 +169,9 @@ await Promise.all(usdtPairs.map(async coin=>{
 let symbol=coin.symbol;
 let volume=parseFloat(coin.quoteVolume);
 let change24=parseFloat(coin.priceChangePercent);
+let dayHigh = parseFloat(coin.highPrice);
+let dayLow = parseFloat(coin.lowPrice);
+let currentPrice = parseFloat(coin.lastPrice);
 
 try{
 
@@ -176,6 +179,7 @@ let k1=await fetch(
 `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=1h&limit=20`
 ).then(res=>res.json());
 
+let currentOpen = parseFloat(k1[19][1]);
 let closes=k1.map(k=>parseFloat(k[4]));
 let highs=k1.map(k=>parseFloat(k[2]));
 let lows=k1.map(k=>parseFloat(k[3]));
@@ -250,7 +254,8 @@ else if(score>60){scalp="⚡ MED";scalpClass="medium";}
 tableData.push({
 symbol,change1h,prev1h,change4h,prev4h,
 change24,oiTrend,oiClass,liqText,
-volume,atr,breakout,score,scalp,scalpClass
+volume,atr,breakout,score,scalp,scalpClass,dayHigh,
+dayLow,currentPrice,currentOpen
 });
 
 }catch(e){}
@@ -359,6 +364,17 @@ let index = currentRow.getAttribute("data-index");
 let row = sortedData[index];
 
 let volFormatted=(row.volume/1000000).toFixed(1)+"M";
+let volFormatted=(row.volume/1000000).toFixed(1)+"M";
+
+let distanceFromHigh = ((row.currentPrice - row.dayHigh) / row.dayHigh) * 100;
+let distanceFromLow = ((row.currentPrice - row.dayLow) / row.dayLow) * 100;
+
+let nearHigh = Math.abs(distanceFromHigh) < 1 ? "YES" : "NO";
+let nearLow = Math.abs(distanceFromLow) < 1 ? "YES" : "NO";
+
+let momentum = "Weak";
+if(Math.abs(row.change1h) > 1) momentum = "Strong";
+else if(Math.abs(row.change1h) > 0.5) momentum = "Moderate";
 
 // Create detail row
 let detailRow = document.createElement("tr");
@@ -367,6 +383,25 @@ detailRow.className = "detail-row";
 detailRow.innerHTML = `
 <td colspan="14">
 <div class="detailBox">
+
+<table class="detailTable">
+<tr>
+<th>Open</th>
+<th>High</th>
+<th>Low</th>
+<th>Current</th>
+<th>ATR%</th>
+</tr>
+<tr>
+<td>${row.currentOpen.toFixed(4)}</td>
+<td>${row.dayHigh.toFixed(4)}</td>
+<td>${row.dayLow.toFixed(4)}</td>
+<td>${row.currentPrice.toFixed(4)}</td>
+<td>${row.atr.toFixed(2)}</td>
+</tr>
+</table>
+
+<br>
 
 <table class="detailTable">
 <tr>
@@ -392,19 +427,17 @@ detailRow.innerHTML = `
 <th>OI</th>
 <th>Liquidation</th>
 <th>Volume</th>
-<th>ATR%</th>
-<th>Breakout</th>
-<th>Score</th>
-<th>Scalp</th>
+<th>Momentum</th>
+<th>Near Day High</th>
+<th>Near Day Low</th>
 </tr>
 <tr>
 <td>${row.oiTrend}</td>
 <td>${row.liqText}</td>
 <td>${volFormatted}</td>
-<td>${row.atr.toFixed(2)}</td>
-<td>${row.breakout}</td>
-<td>${row.score}</td>
-<td>${row.scalp}</td>
+<td>${momentum}</td>
+<td>${nearHigh}</td>
+<td>${nearLow}</td>
 </tr>
 </table>
 
