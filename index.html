@@ -364,7 +364,6 @@ let index = currentRow.getAttribute("data-index");
 let row = sortedData[index];
 
 let volFormatted=(row.volume/1000000).toFixed(1)+"M";
-let volFormatted=(row.volume/1000000).toFixed(1)+"M";
 
 let distanceFromHigh = ((row.currentPrice - row.dayHigh) / row.dayHigh) * 100;
 let distanceFromLow = ((row.currentPrice - row.dayLow) / row.dayLow) * 100;
