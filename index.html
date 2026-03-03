@@ -67,6 +67,28 @@ tr:nth-child(even) { background: #1a1a1a; }
     text-align:left;
 }
 
+    .detailBox {
+    background:#111;
+    padding:15px;
+    border-radius:8px;
+}
+
+.detailTable {
+    width:100%;
+    border-collapse:collapse;
+    margin-bottom:10px;
+}
+
+.detailTable th {
+    background:#222;
+    font-size:11px;
+}
+
+.detailTable td {
+    font-size:11px;
+    padding:6px;
+}
+    
 </style>
 </head>
 
@@ -282,6 +304,7 @@ sortedData.forEach((row,index)=>{
 let volFormatted=(row.volume/1000000).toFixed(1)+"M";
 
 let tr=document.createElement("tr");
+tr.setAttribute("data-index", index);
 
 tr.innerHTML=`
 <td onclick="openChart('${row.symbol}')" style="color:#4da3ff;cursor:pointer">
@@ -303,58 +326,93 @@ ${row.symbol}</td>
 <td>${row.score}</td>
 <td class="${row.scalpClass}">${row.scalp}</td>
 
-<td onclick="toggleDetails(${index})" style="cursor:pointer">▶</td>
+<td style="cursor:pointer" onclick="toggleDetails(this)">▶</td>
 `;
 
 tbody.appendChild(tr);
 });
 }
 
-function toggleDetails(index){
+function toggleDetails(element){
 
-let tbody=document.querySelector("#cryptoTable tbody");
-let existing=document.getElementById("detailRow");
+let currentRow = element.parentElement;
+let tbody = document.querySelector("#cryptoTable tbody");
 
+// remove existing detail row
+let existing = document.querySelector(".detail-row");
 if(existing){
-existing.remove();
-return;
+    existing.remove();
 }
 
-let row=sortedData[index];
+// if already open on same row, just close
+if(currentRow.classList.contains("expanded")){
+    currentRow.classList.remove("expanded");
+    return;
+}
 
-let momentum="Weak";
-if(Math.abs(row.change1h)>1) momentum="Strong";
-else if(Math.abs(row.change1h)>0.5) momentum="Moderate";
+// remove expanded class from others
+document.querySelectorAll("#cryptoTable tr").forEach(r=>r.classList.remove("expanded"));
 
-let nearHigh=row.change24>15?"YES":"NO";
-let nearLow=row.change24<-15?"YES":"NO";
+currentRow.classList.add("expanded");
 
-let detail=document.createElement("tr");
-detail.id="detailRow";
-detail.className="detailsRow";
+let index = currentRow.getAttribute("data-index");
+let row = sortedData[index];
 
-detail.innerHTML=`
-<td colspan="14" style="padding:15px">
+let volFormatted=(row.volume/1000000).toFixed(1)+"M";
 
-<b>${row.symbol} Details</b><br><br>
+// Create detail row
+let detailRow = document.createElement("tr");
+detailRow.className = "detail-row";
 
-1h: ${row.change1h.toFixed(2)}% |
-Prev1h: ${row.prev1h.toFixed(2)}%<br>
+detailRow.innerHTML = `
+<td colspan="14">
+<div class="detailBox">
 
-4h: ${row.change4h.toFixed(2)}% |
-Prev4h: ${row.prev4h.toFixed(2)}%<br><br>
+<table class="detailTable">
+<tr>
+<th>1h</th>
+<th>Prev1h</th>
+<th>4h</th>
+<th>Prev4h</th>
+<th>24h</th>
+</tr>
+<tr>
+<td>${row.change1h.toFixed(2)}%</td>
+<td>${row.prev1h.toFixed(2)}%</td>
+<td>${row.change4h.toFixed(2)}%</td>
+<td>${row.prev4h.toFixed(2)}%</td>
+<td>${row.change24.toFixed(2)}%</td>
+</tr>
+</table>
 
-Near High: ${nearHigh}<br>
-Near Low: ${nearLow}<br>
-Momentum: ${momentum}<br><br>
+<br>
 
-Score: ${row.score}<br>
-Scalp: ${row.scalp}
+<table class="detailTable">
+<tr>
+<th>OI</th>
+<th>Liquidation</th>
+<th>Volume</th>
+<th>ATR%</th>
+<th>Breakout</th>
+<th>Score</th>
+<th>Scalp</th>
+</tr>
+<tr>
+<td>${row.oiTrend}</td>
+<td>${row.liqText}</td>
+<td>${volFormatted}</td>
+<td>${row.atr.toFixed(2)}</td>
+<td>${row.breakout}</td>
+<td>${row.score}</td>
+<td>${row.scalp}</td>
+</tr>
+</table>
 
+</div>
 </td>
 `;
 
-tbody.children[index+1].after(detail);
+currentRow.after(detailRow);
 }
 
 function openChart(symbol){
