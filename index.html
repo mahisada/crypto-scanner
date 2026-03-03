@@ -62,6 +62,11 @@ tr:nth-child(even) { background: #1a1a1a; }
 .medium { color:#f1c40f; }
 .low { color:#888; }
 
+.detailsRow {
+    background:#111;
+    text-align:left;
+}
+
 </style>
 </head>
 
@@ -73,9 +78,9 @@ tr:nth-child(even) { background: #1a1a1a; }
 
 <button onclick="fetchData()">🔄 Refresh</button>
 
+<!-- BEST OPPORTUNITIES -->
 <div class="panel">
 <b>🔥 Best Opportunities</b>
-
 <div class="tableWrap">
 <table>
 <thead>
@@ -90,9 +95,9 @@ tr:nth-child(even) { background: #1a1a1a; }
 <tbody id="bestBody"></tbody>
 </table>
 </div>
-
 </div>
 
+<!-- MAIN TABLE -->
 <div class="tableWrap">
 <table id="cryptoTable">
 <thead>
@@ -110,6 +115,7 @@ tr:nth-child(even) { background: #1a1a1a; }
 <th>Breakout</th>
 <th>Score</th>
 <th>Scalp</th>
+<th>Details</th>
 </tr>
 </thead>
 <tbody></tbody>
@@ -120,6 +126,7 @@ tr:nth-child(even) { background: #1a1a1a; }
 
 let tableData=[];
 let oiCache={};
+let sortedData=[];
 
 async function fetchData(){
 
@@ -169,6 +176,8 @@ trSum+=tr;
 }
 let atr=(trSum/14)/c1*100;
 
+if(Math.abs(change1h)<0.05 && atr<0.2) return;
+
 let k4=await fetch(
 `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=4h&limit=3`
 ).then(res=>res.json());
@@ -216,18 +225,13 @@ let scalp="LOW",scalpClass="low";
 if(score>75){scalp="🔥 HIGH";scalpClass="high";}
 else if(score>60){scalp="⚡ MED";scalpClass="medium";}
 
-    // FILTER DEAD COINS
-if (Math.abs(change1h) < 0.05 && atr < 0.2) {
-    return;
-}
-    
 tableData.push({
 symbol,change1h,prev1h,change4h,prev4h,
 change24,oiTrend,oiClass,liqText,
 volume,atr,breakout,score,scalp,scalpClass
 });
 
-}catch(e){console.log(symbol,e);}
+}catch(e){}
 
 }));
 
@@ -237,7 +241,6 @@ renderTable();
 let now=new Date();
 document.getElementById("lastUpdated").innerText=
 "Last Updated: "+now.toLocaleTimeString();
-
 }
 
 function renderBest(){
@@ -264,9 +267,7 @@ tr.innerHTML=`
 `;
 
 body.appendChild(tr);
-
 });
-
 }
 
 function renderTable(){
@@ -274,10 +275,9 @@ function renderTable(){
 let tbody=document.querySelector("#cryptoTable tbody");
 tbody.innerHTML="";
 
-let sorted=[...tableData]
-.sort((a,b)=>b.change1h-a.change1h);
+sortedData=[...tableData].sort((a,b)=>b.change1h-a.change1h);
 
-sorted.forEach(row=>{
+sortedData.forEach((row,index)=>{
 
 let volFormatted=(row.volume/1000000).toFixed(1)+"M";
 
@@ -296,24 +296,65 @@ ${row.symbol}</td>
 <td class="${row.change24>=0?'positive':'negative'}">${row.change24.toFixed(2)}%</td>
 
 <td class="${row.oiClass}">${row.oiTrend}</td>
-
 <td>${row.liqText}</td>
-
 <td>${volFormatted}</td>
-
 <td>${row.atr.toFixed(2)}</td>
-
 <td>${row.breakout}</td>
-
 <td>${row.score}</td>
-
 <td class="${row.scalpClass}">${row.scalp}</td>
+
+<td onclick="toggleDetails(${index})" style="cursor:pointer">▶</td>
 `;
 
 tbody.appendChild(tr);
-
 });
+}
 
+function toggleDetails(index){
+
+let tbody=document.querySelector("#cryptoTable tbody");
+let existing=document.getElementById("detailRow");
+
+if(existing){
+existing.remove();
+return;
+}
+
+let row=sortedData[index];
+
+let momentum="Weak";
+if(Math.abs(row.change1h)>1) momentum="Strong";
+else if(Math.abs(row.change1h)>0.5) momentum="Moderate";
+
+let nearHigh=row.change24>15?"YES":"NO";
+let nearLow=row.change24<-15?"YES":"NO";
+
+let detail=document.createElement("tr");
+detail.id="detailRow";
+detail.className="detailsRow";
+
+detail.innerHTML=`
+<td colspan="14" style="padding:15px">
+
+<b>${row.symbol} Details</b><br><br>
+
+1h: ${row.change1h.toFixed(2)}% |
+Prev1h: ${row.prev1h.toFixed(2)}%<br>
+
+4h: ${row.change4h.toFixed(2)}% |
+Prev4h: ${row.prev4h.toFixed(2)}%<br><br>
+
+Near High: ${nearHigh}<br>
+Near Low: ${nearLow}<br>
+Momentum: ${momentum}<br><br>
+
+Score: ${row.score}<br>
+Scalp: ${row.scalp}
+
+</td>
+`;
+
+tbody.children[index+1].after(detail);
 }
 
 function openChart(symbol){
