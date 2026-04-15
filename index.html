@@ -62,12 +62,7 @@ tr:nth-child(even) { background: #1a1a1a; }
 .medium { color:#f1c40f; }
 .low { color:#888; }
 
-.detailsRow {
-    background:#111;
-    text-align:left;
-}
-
-    .detailBox {
+.detailBox {
     background:#111;
     padding:15px;
     border-radius:8px;
@@ -88,7 +83,6 @@ tr:nth-child(even) { background: #1a1a1a; }
     font-size:11px;
     padding:6px;
 }
-    
 </style>
 </head>
 
@@ -100,7 +94,6 @@ tr:nth-child(even) { background: #1a1a1a; }
 
 <button onclick="fetchData()">🔄 Refresh</button>
 
-<!-- BEST OPPORTUNITIES -->
 <div class="panel">
 <b>🔥 Best Opportunities</b>
 <div class="tableWrap">
@@ -119,12 +112,15 @@ tr:nth-child(even) { background: #1a1a1a; }
 </div>
 </div>
 
-<!-- MAIN TABLE -->
 <div class="tableWrap">
 <table id="cryptoTable">
 <thead>
 <tr>
 <th>Symbol</th>
+
+<th>15m</th>
+<th>Prev15m</th>
+
 <th>1h</th>
 <th>Prev1h</th>
 <th>4h</th>
@@ -175,6 +171,20 @@ let currentPrice = parseFloat(coin.lastPrice);
 
 try{
 
+// ===== 15 MIN DATA =====
+let k15=await fetch(
+`https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=15m&limit=5`
+).then(res=>res.json());
+
+let c15_1 = parseFloat(k15[4][4]);
+let c15_2 = parseFloat(k15[3][4]);
+let c15_3 = parseFloat(k15[2][4]);
+
+let change15m = ((c15_1 - c15_2) / c15_2) * 100;
+let prev15m = ((c15_2 - c15_3) / c15_3) * 100;
+
+
+// ===== 1H DATA =====
 let k1=await fetch(
 `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=1h&limit=20`
 ).then(res=>res.json());
@@ -204,6 +214,8 @@ let atr=(trSum/14)/c1*100;
 
 if(Math.abs(change1h)<0.05 && atr<0.2) return;
 
+
+// ===== 4H DATA =====
 let k4=await fetch(
 `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=4h&limit=3`
 ).then(res=>res.json());
@@ -215,6 +227,8 @@ let d3=parseFloat(k4[0][4]);
 let change4h=((d1-d2)/d2)*100;
 let prev4h=((d2-d3)/d3)*100;
 
+
+// ===== OI =====
 let oiData=await fetch(
 `https://fapi.binance.com/fapi/v1/openInterest?symbol=${symbol}`
 ).then(res=>res.json());
@@ -229,15 +243,21 @@ let oiTrend="Neutral",oiClass="";
 if(change1h>0&&oiChange>0.05){oiTrend="Strong Buying";oiClass="bull";}
 else if(change1h<0&&oiChange>0.05){oiTrend="Strong Selling";oiClass="bear";}
 
+
+// ===== LIQ =====
 let liqText="Low";
 if(change1h>1&&oiChange<-0.05) liqText="🔥 Shorts Squeezed";
 else if(change1h<-1&&oiChange<-0.05) liqText="🔥 Longs Wiped";
 else if(Math.abs(change1h)>1&&oiChange>0.05) liqText="⚠️ Possible";
 
+
+// ===== BREAKOUT =====
 let breakout="-";
 if(change1h>Math.abs(prev1h)*1.5) breakout="🚀 Up";
 if(change1h<-Math.abs(prev1h)*1.5) breakout="💥 Down";
 
+
+// ===== SCORE =====
 let score=50;
 score+=change1h*5;
 score+=change4h*3;
@@ -251,11 +271,36 @@ let scalp="LOW",scalpClass="low";
 if(score>75){scalp="🔥 HIGH";scalpClass="high";}
 else if(score>60){scalp="⚡ MED";scalpClass="medium";}
 
+
+// ===== PUSH =====
 tableData.push({
-symbol,change1h,prev1h,change4h,prev4h,
-change24,oiTrend,oiClass,liqText,
-volume,atr,breakout,score,scalp,scalpClass,dayHigh,
-dayLow,currentPrice,currentOpen
+symbol,
+
+change15m,
+prev15m,
+
+change1h,
+prev1h,
+change4h,
+prev4h,
+
+change24,
+oiTrend,
+oiClass,
+liqText,
+volume,
+atr,
+
+breakout,
+
+score,
+scalp,
+scalpClass,
+
+dayHigh,
+dayLow,
+currentPrice,
+currentOpen
 });
 
 }catch(e){}
@@ -270,6 +315,8 @@ document.getElementById("lastUpdated").innerText=
 "Last Updated: "+now.toLocaleTimeString();
 }
 
+
+// ===== BEST =====
 function renderBest(){
 
 let best=[...tableData]
@@ -297,12 +344,15 @@ body.appendChild(tr);
 });
 }
 
+
+// ===== TABLE =====
 function renderTable(){
 
 let tbody=document.querySelector("#cryptoTable tbody");
 tbody.innerHTML="";
 
-sortedData=[...tableData].sort((a,b)=>b.change1h-a.change1h);
+// 🔥 SORT BY 15m
+sortedData=[...tableData].sort((a,b)=>b.change15m-a.change15m);
 
 sortedData.forEach((row,index)=>{
 
@@ -314,6 +364,9 @@ tr.setAttribute("data-index", index);
 tr.innerHTML=`
 <td onclick="openChart('${row.symbol}')" style="color:#4da3ff;cursor:pointer">
 ${row.symbol}</td>
+
+<td class="${row.change15m>=0?'positive':'negative'}">${row.change15m.toFixed(2)}%</td>
+<td class="${row.prev15m>=0?'positive':'negative'}">${row.prev15m.toFixed(2)}%</td>
 
 <td class="${row.change1h>=0?'positive':'negative'}">${row.change1h.toFixed(2)}%</td>
 <td class="${row.prev1h>=0?'positive':'negative'}">${row.prev1h.toFixed(2)}%</td>
@@ -336,115 +389,6 @@ ${row.symbol}</td>
 
 tbody.appendChild(tr);
 });
-}
-
-function toggleDetails(element){
-
-let currentRow = element.parentElement;
-let tbody = document.querySelector("#cryptoTable tbody");
-
-// remove existing detail row
-let existing = document.querySelector(".detail-row");
-if(existing){
-    existing.remove();
-}
-
-// if already open on same row, just close
-if(currentRow.classList.contains("expanded")){
-    currentRow.classList.remove("expanded");
-    return;
-}
-
-// remove expanded class from others
-document.querySelectorAll("#cryptoTable tr").forEach(r=>r.classList.remove("expanded"));
-
-currentRow.classList.add("expanded");
-
-let index = currentRow.getAttribute("data-index");
-let row = sortedData[index];
-
-let volFormatted=(row.volume/1000000).toFixed(1)+"M";
-
-let distanceFromHigh = ((row.currentPrice - row.dayHigh) / row.dayHigh) * 100;
-let distanceFromLow = ((row.currentPrice - row.dayLow) / row.dayLow) * 100;
-
-let nearHigh = Math.abs(distanceFromHigh) < 1 ? "YES" : "NO";
-let nearLow = Math.abs(distanceFromLow) < 1 ? "YES" : "NO";
-
-let momentum = "Weak";
-if(Math.abs(row.change1h) > 1) momentum = "Strong";
-else if(Math.abs(row.change1h) > 0.5) momentum = "Moderate";
-
-// Create detail row
-let detailRow = document.createElement("tr");
-detailRow.className = "detail-row";
-
-detailRow.innerHTML = `
-<td colspan="14">
-<div class="detailBox">
-
-<table class="detailTable">
-<tr>
-<th>Open</th>
-<th>High</th>
-<th>Low</th>
-<th>Current</th>
-<th>ATR%</th>
-</tr>
-<tr>
-<td>${row.currentOpen.toFixed(4)}</td>
-<td>${row.dayHigh.toFixed(4)}</td>
-<td>${row.dayLow.toFixed(4)}</td>
-<td>${row.currentPrice.toFixed(4)}</td>
-<td>${row.atr.toFixed(2)}</td>
-</tr>
-</table>
-
-<br>
-
-<table class="detailTable">
-<tr>
-<th>1h</th>
-<th>Prev1h</th>
-<th>4h</th>
-<th>Prev4h</th>
-<th>24h</th>
-</tr>
-<tr>
-<td>${row.change1h.toFixed(2)}%</td>
-<td>${row.prev1h.toFixed(2)}%</td>
-<td>${row.change4h.toFixed(2)}%</td>
-<td>${row.prev4h.toFixed(2)}%</td>
-<td>${row.change24.toFixed(2)}%</td>
-</tr>
-</table>
-
-<br>
-
-<table class="detailTable">
-<tr>
-<th>OI</th>
-<th>Liquidation</th>
-<th>Volume</th>
-<th>Momentum</th>
-<th>Near Day High</th>
-<th>Near Day Low</th>
-</tr>
-<tr>
-<td>${row.oiTrend}</td>
-<td>${row.liqText}</td>
-<td>${volFormatted}</td>
-<td>${momentum}</td>
-<td>${nearHigh}</td>
-<td>${nearLow}</td>
-</tr>
-</table>
-
-</div>
-</td>
-`;
-
-currentRow.after(detailRow);
 }
 
 function openChart(symbol){
