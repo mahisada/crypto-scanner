@@ -48,7 +48,7 @@ th, td {
     font-size: 12px;
 }
 
-th { background: #222; }
+th { background: #222; cursor:pointer; }
 
 tr:nth-child(even) { background: #1a1a1a; }
 
@@ -116,23 +116,24 @@ tr:nth-child(even) { background: #1a1a1a; }
 <table id="cryptoTable">
 <thead>
 <tr>
-<th>Symbol</th>
+<th onclick="setSort('symbol')">Symbol</th>
 
-<th>15m</th>
-<th>Prev15m</th>
+<th onclick="setSort('change15m')">15m</th>
+<th onclick="setSort('prev15m')">Prev15m</th>
 
-<th>1h</th>
-<th>Prev1h</th>
-<th>4h</th>
-<th>Prev4h</th>
-<th>24h</th>
-<th>OI</th>
-<th>Liquidation</th>
-<th>Vol</th>
-<th>ATR%</th>
-<th>Breakout</th>
-<th>Score</th>
-<th>Scalp</th>
+<th onclick="setSort('change1h')">1h</th>
+<th onclick="setSort('prev1h')">Prev1h</th>
+<th onclick="setSort('change4h')">4h</th>
+<th onclick="setSort('prev4h')">Prev4h</th>
+
+<th onclick="setSort('change24')">24h</th>
+<th onclick="setSort('oiTrend')">OI</th>
+<th onclick="setSort('liqText')">Liquidation</th>
+<th onclick="setSort('volume')">Vol</th>
+<th onclick="setSort('atr')">ATR%</th>
+<th onclick="setSort('breakout')">Breakout</th>
+<th onclick="setSort('score')">Score</th>
+<th onclick="setSort('scalp')">Scalp</th>
 <th>Details</th>
 </tr>
 </thead>
@@ -145,6 +146,10 @@ tr:nth-child(even) { background: #1a1a1a; }
 let tableData=[];
 let oiCache={};
 let sortedData=[];
+
+// 🔥 SORT STATE
+let sortKey = "change15m";
+let sortAsc = false;
 
 async function fetchData(){
 
@@ -164,6 +169,7 @@ await Promise.all(usdtPairs.map(async coin=>{
 
 let symbol=coin.symbol;
 let volume=parseFloat(coin.quoteVolume);
+
 // ===== TRUE 1D (5:30 AM IST RESET) =====
 let k1d = await fetch(
 `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=1d&limit=2`
@@ -173,6 +179,7 @@ let todayClose = parseFloat(k1d[1][4]);
 let yesterdayClose = parseFloat(k1d[0][4]);
 
 let change24 = ((todayClose - yesterdayClose) / yesterdayClose) * 100;
+
 let dayHigh = parseFloat(coin.highPrice);
 let dayLow = parseFloat(coin.lowPrice);
 let currentPrice = parseFloat(coin.lastPrice);
@@ -283,30 +290,18 @@ else if(score>60){scalp="⚡ MED";scalpClass="medium";}
 // ===== PUSH =====
 tableData.push({
 symbol,
-
-change15m,
-prev15m,
-
-change1h,
-prev1h,
-change4h,
-prev4h,
-
+change15m, prev15m,
+change1h, prev1h,
+change4h, prev4h,
 change24,
-oiTrend,
-oiClass,
+oiTrend, oiClass,
 liqText,
 volume,
 atr,
-
 breakout,
-
 score,
-scalp,
-scalpClass,
-
-dayHigh,
-dayLow,
+scalp, scalpClass,
+dayHigh, dayLow,
 currentPrice,
 currentOpen
 });
@@ -324,6 +319,18 @@ document.getElementById("lastUpdated").innerText=
 }
 
 
+// ===== SORT FUNCTION =====
+function setSort(key){
+    if(sortKey === key){
+        sortAsc = !sortAsc;
+    } else {
+        sortKey = key;
+        sortAsc = false;
+    }
+    renderTable();
+}
+
+
 // ===== BEST =====
 function renderBest(){
 
@@ -335,7 +342,6 @@ let body=document.getElementById("bestBody");
 body.innerHTML="";
 
 best.forEach(r=>{
-
 let dir=r.change1h>0?"LONG":"SHORT";
 
 let tr=document.createElement("tr");
@@ -359,15 +365,25 @@ function renderTable(){
 let tbody=document.querySelector("#cryptoTable tbody");
 tbody.innerHTML="";
 
-// 🔥 SORT BY 15m
-sortedData=[...tableData].sort((a,b)=>b.change15m-a.change15m);
+// 🔥 DYNAMIC SORT
+sortedData = [...tableData].sort((a,b)=>{
+    let valA = a[sortKey];
+    let valB = b[sortKey];
+
+    if(typeof valA === "string"){
+        return sortAsc 
+            ? valA.localeCompare(valB)
+            : valB.localeCompare(valA);
+    }
+
+    return sortAsc ? valA - valB : valB - valA;
+});
 
 sortedData.forEach((row,index)=>{
 
 let volFormatted=(row.volume/1000000).toFixed(1)+"M";
 
 let tr=document.createElement("tr");
-tr.setAttribute("data-index", index);
 
 tr.innerHTML=`
 <td onclick="openChart('${row.symbol}')" style="color:#4da3ff;cursor:pointer">
