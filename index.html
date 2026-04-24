@@ -164,7 +164,15 @@ await Promise.all(usdtPairs.map(async coin=>{
 
 let symbol=coin.symbol;
 let volume=parseFloat(coin.quoteVolume);
-let change24=parseFloat(coin.priceChangePercent);
+// ===== TRUE 1D (5:30 AM IST RESET) =====
+let k1d = await fetch(
+`https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=1d&limit=2`
+).then(res => res.json());
+
+let todayClose = parseFloat(k1d[1][4]);
+let yesterdayClose = parseFloat(k1d[0][4]);
+
+let change24 = ((todayClose - yesterdayClose) / yesterdayClose) * 100;
 let dayHigh = parseFloat(coin.highPrice);
 let dayLow = parseFloat(coin.lowPrice);
 let currentPrice = parseFloat(coin.lastPrice);
