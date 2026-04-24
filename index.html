@@ -344,32 +344,49 @@ function setSort(key){
 
 
 // ===== BEST =====
+
 function renderBest(){
 
-let best=[...tableData]
-.sort((a,b)=>b.score-a.score)
+// ===== TOP GAINERS =====
+let gainers = [...tableData]
+.sort((a,b)=>b.change24-a.change24)
 .slice(0,5);
 
-let body=document.getElementById("bestBody");
-body.innerHTML="";
+let gBody=document.getElementById("gainersBody");
+gBody.innerHTML="";
 
-best.forEach(r=>{
-let dir=r.change1h>0?"LONG":"SHORT";
-
+gainers.forEach(r=>{
 let tr=document.createElement("tr");
 
 tr.innerHTML=`
 <td>${r.symbol}</td>
-<td>${dir}</td>
-<td>${r.score}</td>
-<td class="${r.scalpClass}">${r.scalp}</td>
-<td>${r.breakout}</td>
+<td class="positive">${r.change24.toFixed(2)}%</td>
 `;
 
-body.appendChild(tr);
+gBody.appendChild(tr);
 });
-}
 
+
+// ===== TOP LOSERS =====
+let losers = [...tableData]
+.sort((a,b)=>a.change24-b.change24)
+.slice(0,5);
+
+let lBody=document.getElementById("losersBody");
+lBody.innerHTML="";
+
+losers.forEach(r=>{
+let tr=document.createElement("tr");
+
+tr.innerHTML=`
+<td>${r.symbol}</td>
+<td class="negative">${r.change24.toFixed(2)}%</td>
+`;
+
+lBody.appendChild(tr);
+});
+
+}
 
 // ===== TABLE =====
 function renderTable(){
