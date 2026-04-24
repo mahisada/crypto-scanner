@@ -95,19 +95,31 @@ tr:nth-child(even) { background: #1a1a1a; }
 <button onclick="fetchData()">🔄 Refresh</button>
 
 <div class="panel">
-<b>🔥 Best Opportunities</b>
+<b>📈 Top Gainers (24h)</b>
 <div class="tableWrap">
 <table>
 <thead>
 <tr>
 <th>Symbol</th>
-<th>Direction</th>
-<th>Score</th>
-<th>Scalp</th>
-<th>Breakout</th>
+<th>24h %</th>
 </tr>
 </thead>
-<tbody id="bestBody"></tbody>
+<tbody id="gainersBody"></tbody>
+</table>
+</div>
+</div>
+
+<div class="panel">
+<b>📉 Top Losers (24h)</b>
+<div class="tableWrap">
+<table>
+<thead>
+<tr>
+<th>Symbol</th>
+<th>24h %</th>
+</tr>
+</thead>
+<tbody id="losersBody"></tbody>
 </table>
 </div>
 </div>
