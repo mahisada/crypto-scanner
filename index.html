@@ -61,28 +61,6 @@ tr:nth-child(even) { background: #1a1a1a; }
 .high { color:#00ff9c; font-weight:bold; }
 .medium { color:#f1c40f; }
 .low { color:#888; }
-
-.detailBox {
-    background:#111;
-    padding:15px;
-    border-radius:8px;
-}
-
-.detailTable {
-    width:100%;
-    border-collapse:collapse;
-    margin-bottom:10px;
-}
-
-.detailTable th {
-    background:#222;
-    font-size:11px;
-}
-
-.detailTable td {
-    font-size:11px;
-    padding:6px;
-}
 </style>
 </head>
 
@@ -91,77 +69,73 @@ tr:nth-child(even) { background: #1a1a1a; }
 <h2>🚀 Futures Volatility Scanner</h2>
 
 <div id="lastUpdated">Last Updated: --</div>
-
 <button onclick="fetchData()">🔄 Refresh</button>
 
+<!-- Gainers -->
 <div class="panel">
 <b>📈 Top Gainers (24h)</b>
-<div class="tableWrap">
 <table>
 <thead>
 <tr>
 <th>Symbol</th>
-<th>24h %</th>
+<th>24h</th>
+<th>Prev 24h</th>
 </tr>
 </thead>
 <tbody id="gainersBody"></tbody>
 </table>
 </div>
-</div>
 
+<!-- Losers -->
 <div class="panel">
 <b>📉 Top Losers (24h)</b>
-<div class="tableWrap">
 <table>
 <thead>
 <tr>
 <th>Symbol</th>
-<th>24h %</th>
+<th>24h</th>
+<th>Prev 24h</th>
 </tr>
 </thead>
 <tbody id="losersBody"></tbody>
 </table>
 </div>
-</div>
 
-<div class="tableWrap">
+<!-- Main Table -->
 <table id="cryptoTable">
 <thead>
 <tr>
 <th onclick="setSort('symbol')">Symbol</th>
 
 <th onclick="setSort('change15m')">15m</th>
-<th onclick="setSort('prev15m')">Prev15m</th>
+<th onclick="setSort('trend15')">15m Trend</th>
 
 <th onclick="setSort('change1h')">1h</th>
-<th onclick="setSort('prev1h')">Prev1h</th>
 <th onclick="setSort('change4h')">4h</th>
-<th onclick="setSort('prev4h')">Prev4h</th>
 
 <th onclick="setSort('change24')">24h</th>
+<th onclick="setSort('prev24')">Prev 24h</th>
+
+<th onclick="setSort('setup')">Setup</th>
+
 <th onclick="setSort('oiTrend')">OI</th>
-<th onclick="setSort('liqText')">Liquidation</th>
+<th onclick="setSort('liqText')">Liq</th>
 <th onclick="setSort('volume')">Vol</th>
 <th onclick="setSort('atr')">ATR%</th>
 <th onclick="setSort('breakout')">Breakout</th>
 <th onclick="setSort('score')">Score</th>
 <th onclick="setSort('scalp')">Scalp</th>
-<th>Details</th>
 </tr>
 </thead>
 <tbody></tbody>
 </table>
-</div>
 
 <script>
 
 let tableData=[];
 let oiCache={};
-let sortedData=[];
-
-// 🔥 SORT STATE
-let sortKey = "change15m";
-let sortAsc = false;
+let sortKey="change15m";
+let sortAsc=false;
 
 async function fetchData(){
 
@@ -182,52 +156,52 @@ await Promise.all(usdtPairs.map(async coin=>{
 let symbol=coin.symbol;
 let volume=parseFloat(coin.quoteVolume);
 
-// ===== TRUE 1D (5:30 AM IST RESET) =====
-let k1d = await fetch(
-`https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=1d&limit=2`
-).then(res => res.json());
+// ===== 1D =====
+let k1d=await fetch(
+`https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=1d&limit=3`
+).then(res=>res.json());
 
-let todayClose = parseFloat(k1d[1][4]);
-let yesterdayClose = parseFloat(k1d[0][4]);
+let c0=parseFloat(k1d[0][4]);
+let c1=parseFloat(k1d[1][4]);
+let c2=parseFloat(k1d[2][4]);
 
-let change24 = ((todayClose - yesterdayClose) / yesterdayClose) * 100;
+let change24=((c2-c1)/c1)*100;
+let prev24=((c1-c0)/c0)*100;
 
-let dayHigh = parseFloat(coin.highPrice);
-let dayLow = parseFloat(coin.lowPrice);
-let currentPrice = parseFloat(coin.lastPrice);
+// ===== SETUP =====
+let setup="Neutral";
+if(change24>5 && prev24>0) setup="🚀 Continuation";
+else if(change24>5 && prev24<0) setup="⚠️ Bounce";
+else if(change24<-5 && prev24>0) setup="🔻 Breakdown";
 
-try{
-
-// ===== 15 MIN DATA =====
+// ===== 15m =====
 let k15=await fetch(
 `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=15m&limit=5`
 ).then(res=>res.json());
 
-let c15_1 = parseFloat(k15[4][4]);
-let c15_2 = parseFloat(k15[3][4]);
-let c15_3 = parseFloat(k15[2][4]);
+let c15_1=parseFloat(k15[4][4]);
+let c15_2=parseFloat(k15[3][4]);
+let c15_3=parseFloat(k15[2][4]);
 
-let change15m = ((c15_1 - c15_2) / c15_2) * 100;
-let prev15m = ((c15_2 - c15_3) / c15_3) * 100;
+let change15m=((c15_1-c15_2)/c15_2)*100;
 
+// ===== 15m Trend =====
+let trend15="⚪ Mixed",trendClass="";
+if(c15_1>c15_2 && c15_2>c15_3){trend15="🟢 Up";trendClass="bull";}
+else if(c15_1<c15_2 && c15_2<c15_3){trend15="🔴 Down";trendClass="bear";}
 
-// ===== 1H DATA =====
+// ===== 1H =====
 let k1=await fetch(
 `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=1h&limit=20`
 ).then(res=>res.json());
 
-let currentOpen = parseFloat(k1[19][1]);
 let closes=k1.map(k=>parseFloat(k[4]));
 let highs=k1.map(k=>parseFloat(k[2]));
 let lows=k1.map(k=>parseFloat(k[3]));
 
-let c1=closes[19];
-let c2=closes[18];
-let c3=closes[17];
+let change1h=((closes[19]-closes[18])/closes[18])*100;
 
-let change1h=((c1-c2)/c2)*100;
-let prev1h=((c2-c3)/c3)*100;
-
+// ATR
 let trSum=0;
 for(let i=6;i<20;i++){
 let tr=Math.max(
@@ -237,23 +211,16 @@ Math.abs(lows[i]-closes[i-1])
 );
 trSum+=tr;
 }
-let atr=(trSum/14)/c1*100;
+let atr=(trSum/14)/closes[19]*100;
 
 if(Math.abs(change1h)<0.05 && atr<0.2) return;
 
-
-// ===== 4H DATA =====
+// ===== 4H =====
 let k4=await fetch(
 `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=4h&limit=3`
 ).then(res=>res.json());
 
-let d1=parseFloat(k4[2][4]);
-let d2=parseFloat(k4[1][4]);
-let d3=parseFloat(k4[0][4]);
-
-let change4h=((d1-d2)/d2)*100;
-let prev4h=((d2-d3)/d3)*100;
-
+let change4h=((k4[2][4]-k4[1][4])/k4[1][4])*100;
 
 // ===== OI =====
 let oiData=await fetch(
@@ -267,180 +234,127 @@ oiCache[symbol]=currentOI;
 let oiChange=prevOI?((currentOI-prevOI)/prevOI)*100:0;
 
 let oiTrend="Neutral",oiClass="";
-if(change1h>0&&oiChange>0.05){oiTrend="Strong Buying";oiClass="bull";}
-else if(change1h<0&&oiChange>0.05){oiTrend="Strong Selling";oiClass="bear";}
-
+if(change1h>0&&oiChange>0.05){oiTrend="Buy";oiClass="bull";}
+else if(change1h<0&&oiChange>0.05){oiTrend="Sell";oiClass="bear";}
 
 // ===== LIQ =====
 let liqText="Low";
-if(change1h>1&&oiChange<-0.05) liqText="🔥 Shorts Squeezed";
-else if(change1h<-1&&oiChange<-0.05) liqText="🔥 Longs Wiped";
-else if(Math.abs(change1h)>1&&oiChange>0.05) liqText="⚠️ Possible";
-
+if(change1h>1&&oiChange<-0.05) liqText="Short Sqz";
+else if(change1h<-1&&oiChange<-0.05) liqText="Long Wipe";
 
 // ===== BREAKOUT =====
 let breakout="-";
-if(change1h>Math.abs(prev1h)*1.5) breakout="🚀 Up";
-if(change1h<-Math.abs(prev1h)*1.5) breakout="💥 Down";
-
+if(change1h>1) breakout="🚀";
+if(change1h<-1) breakout="💥";
 
 // ===== SCORE =====
-let score=50;
-score+=change1h*5;
-score+=change4h*3;
-score+=change24*0.5;
-if(oiTrend.includes("Strong"))score+=10;
-if(atr>1)score+=10;
-
+let score=50+change1h*5+change4h*3+change24*0.5;
+if(oiTrend!=="Neutral") score+=10;
+if(atr>1) score+=10;
 score=Math.max(0,Math.min(100,Math.round(score)));
 
 let scalp="LOW",scalpClass="low";
-if(score>75){scalp="🔥 HIGH";scalpClass="high";}
-else if(score>60){scalp="⚡ MED";scalpClass="medium";}
-
+if(score>75){scalp="HIGH";scalpClass="high";}
+else if(score>60){scalp="MED";scalpClass="medium";}
 
 // ===== PUSH =====
 tableData.push({
 symbol,
-change15m, prev15m,
-change1h, prev1h,
-change4h, prev4h,
-change24,
-oiTrend, oiClass,
+change15m,
+trend15,trendClass,
+change1h,change4h,
+change24,prev24,
+setup,
+oiTrend,oiClass,
 liqText,
-volume,
-atr,
+volume,atr,
 breakout,
 score,
-scalp, scalpClass,
-dayHigh, dayLow,
-currentPrice,
-currentOpen
+scalp,scalpClass
 });
-
-}catch(e){}
 
 }));
 
 renderBest();
 renderTable();
 
-let now=new Date();
 document.getElementById("lastUpdated").innerText=
-"Last Updated: "+now.toLocaleTimeString();
+"Last Updated: "+new Date().toLocaleTimeString();
 }
 
-
-// ===== SORT FUNCTION =====
+// SORT
 function setSort(key){
-    if(sortKey === key){
-        sortAsc = !sortAsc;
-    } else {
-        sortKey = key;
-        sortAsc = false;
-    }
-    renderTable();
+if(sortKey===key) sortAsc=!sortAsc;
+else{sortKey=key;sortAsc=false;}
+renderTable();
 }
 
-
-// ===== BEST =====
-
+// GAINERS / LOSERS
 function renderBest(){
 
-// ===== TOP GAINERS =====
-let gainers = [...tableData]
-.sort((a,b)=>b.change24-a.change24)
-.slice(0,5);
+let gainers=[...tableData].sort((a,b)=>b.change24-a.change24).slice(0,5);
+let losers=[...tableData].sort((a,b)=>a.change24-b.change24).slice(0,5);
 
-let gBody=document.getElementById("gainersBody");
-gBody.innerHTML="";
+let g=document.getElementById("gainersBody");
+let l=document.getElementById("losersBody");
+
+g.innerHTML=""; l.innerHTML="";
 
 gainers.forEach(r=>{
-let tr=document.createElement("tr");
-
-tr.innerHTML=`
+g.innerHTML+=`<tr>
 <td>${r.symbol}</td>
 <td class="positive">${r.change24.toFixed(2)}%</td>
-`;
-
-gBody.appendChild(tr);
+<td class="${r.prev24>=0?'positive':'negative'}">${r.prev24.toFixed(2)}%</td>
+</tr>`;
 });
-
-
-// ===== TOP LOSERS =====
-let losers = [...tableData]
-.sort((a,b)=>a.change24-b.change24)
-.slice(0,5);
-
-let lBody=document.getElementById("losersBody");
-lBody.innerHTML="";
 
 losers.forEach(r=>{
-let tr=document.createElement("tr");
-
-tr.innerHTML=`
+l.innerHTML+=`<tr>
 <td>${r.symbol}</td>
 <td class="negative">${r.change24.toFixed(2)}%</td>
-`;
-
-lBody.appendChild(tr);
+<td class="${r.prev24>=0?'positive':'negative'}">${r.prev24.toFixed(2)}%</td>
+</tr>`;
 });
-
 }
 
-// ===== TABLE =====
+// TABLE
 function renderTable(){
 
 let tbody=document.querySelector("#cryptoTable tbody");
 tbody.innerHTML="";
 
-// 🔥 DYNAMIC SORT
-sortedData = [...tableData].sort((a,b)=>{
-    let valA = a[sortKey];
-    let valB = b[sortKey];
-
-    if(typeof valA === "string"){
-        return sortAsc 
-            ? valA.localeCompare(valB)
-            : valB.localeCompare(valA);
-    }
-
-    return sortAsc ? valA - valB : valB - valA;
+let data=[...tableData].sort((a,b)=>{
+let A=a[sortKey],B=b[sortKey];
+if(typeof A==="string") return sortAsc?A.localeCompare(B):B.localeCompare(A);
+return sortAsc?A-B:B-A;
 });
 
-sortedData.forEach((row,index)=>{
+data.forEach(r=>{
+let vol=(r.volume/1000000).toFixed(1)+"M";
 
-let volFormatted=(row.volume/1000000).toFixed(1)+"M";
+tbody.innerHTML+=`
+<tr>
+<td onclick="openChart('${r.symbol}')" style="color:#4da3ff;cursor:pointer">${r.symbol}</td>
 
-let tr=document.createElement("tr");
+<td class="${r.change15m>=0?'positive':'negative'}">${r.change15m.toFixed(2)}%</td>
+<td class="${r.trendClass}">${r.trend15}</td>
 
-tr.innerHTML=`
-<td onclick="openChart('${row.symbol}')" style="color:#4da3ff;cursor:pointer">
-${row.symbol}</td>
+<td class="${r.change1h>=0?'positive':'negative'}">${r.change1h.toFixed(2)}%</td>
+<td class="${r.change4h>=0?'positive':'negative'}">${r.change4h.toFixed(2)}%</td>
 
-<td class="${row.change15m>=0?'positive':'negative'}">${row.change15m.toFixed(2)}%</td>
-<td class="${row.prev15m>=0?'positive':'negative'}">${row.prev15m.toFixed(2)}%</td>
+<td class="${r.change24>=0?'positive':'negative'}">${r.change24.toFixed(2)}%</td>
+<td class="${r.prev24>=0?'positive':'negative'}">${r.prev24.toFixed(2)}%</td>
 
-<td class="${row.change1h>=0?'positive':'negative'}">${row.change1h.toFixed(2)}%</td>
-<td class="${row.prev1h>=0?'positive':'negative'}">${row.prev1h.toFixed(2)}%</td>
+<td>${r.setup}</td>
 
-<td class="${row.change4h>=0?'positive':'negative'}">${row.change4h.toFixed(2)}%</td>
-<td class="${row.prev4h>=0?'positive':'negative'}">${row.prev4h.toFixed(2)}%</td>
-
-<td class="${row.change24>=0?'positive':'negative'}">${row.change24.toFixed(2)}%</td>
-
-<td class="${row.oiClass}">${row.oiTrend}</td>
-<td>${row.liqText}</td>
-<td>${volFormatted}</td>
-<td>${row.atr.toFixed(2)}</td>
-<td>${row.breakout}</td>
-<td>${row.score}</td>
-<td class="${row.scalpClass}">${row.scalp}</td>
-
-<td style="cursor:pointer" onclick="toggleDetails(this)">▶</td>
-`;
-
-tbody.appendChild(tr);
+<td class="${r.oiClass}">${r.oiTrend}</td>
+<td>${r.liqText}</td>
+<td>${vol}</td>
+<td>${r.atr.toFixed(2)}</td>
+<td>${r.breakout}</td>
+<td>${r.score}</td>
+<td class="${r.scalpClass}">${r.scalp}</td>
+</tr>`;
 });
 }
 
