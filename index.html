@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Momentum Scanner Pro</title>
+<title>Momentum Scanner Pro+</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
 <style>
@@ -12,8 +12,8 @@ h2 { text-align:center; }
 .panel {
     background:#111;
     padding:10px;
-    border-radius:8px;
-    margin-bottom:10px;
+    border-radius:10px;
+    margin-bottom:12px;
 }
 
 table { width:100%; border-collapse:collapse; }
@@ -22,12 +22,17 @@ th { background:#222; }
 
 .positive { color:#00ff9c; }
 .negative { color:#ff4d4d; }
+
+.strong { color:#00ff9c; font-weight:bold; }
+.pullback { color:#f1c40f; }
+.weak { color:#888; }
+
 </style>
 </head>
 
 <body>
 
-<h2>🚀 Momentum Scanner (Trend Filtered)</h2>
+<h2>🚀 Momentum Scanner Pro+</h2>
 <div id="lastUpdated">--</div>
 
 <div class="panel">
@@ -44,16 +49,25 @@ th { background:#222; }
 
 <div class="panel">
 <b>🚀 Momentum Signals (VALID ONLY)</b>
-<table><thead><tr><th>Symbol</th><th>Dir</th><th>5m%</th><th>Status</th></tr></thead>
+<table>
+<thead><tr><th>Symbol</th><th>Dir</th><th>5m%</th><th>Status</th></tr></thead>
 <tbody id="momentum"></tbody>
 </table>
 </div>
 
 <div class="panel">
-<b>📊 Signal History (Since 5:30 AM IST)</b>
+<b>📊 Signal History (Max Tracking)</b>
 <table>
 <thead>
-<tr><th>Symbol</th><th>Time</th><th>Dir</th><th>Entry</th><th>Now%</th></tr>
+<tr>
+<th>Symbol</th>
+<th>Time</th>
+<th>Dir</th>
+<th>Entry</th>
+<th>Now%</th>
+<th>Max%</th>
+<th>DD%</th>
+</tr>
 </thead>
 <tbody id="history"></tbody>
 </table>
@@ -66,7 +80,6 @@ let history = [];
 let lastSignalDirection = {};
 let historyLoaded = false;
 
-// ===== IST START TIME =====
 function getStartTimeIST(){
     let now = new Date();
     let istOffset = 5.5 * 60 * 60 * 1000;
@@ -93,7 +106,7 @@ let losers = [...coins].sort((a,b)=>a.priceChangePercent-b.priceChangePercent).s
 renderSimple(gainers,"gainers",true);
 renderSimple(losers,"losers",false);
 
-// ===== HISTORY BACK-CALCULATION =====
+// ===== HISTORY BACK-CALC =====
 if(!historyLoaded){
 
 let startTime = getStartTimeIST();
@@ -106,7 +119,6 @@ let klines = await fetch(
 `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=5m&limit=300`
 ).then(r=>r.json());
 
-// ===== TREND CALC =====
 let startCandle = klines.find(k => k[0] >= startTime);
 if(!startCandle) continue;
 
@@ -119,7 +131,6 @@ let trendDir = "NEUTRAL";
 if(trend > 1) trendDir = "UP";
 else if(trend < -1) trendDir = "DOWN";
 
-// ===== LOOP SIGNALS =====
 for(let i=3;i<klines.length;i++){
 
 let time = klines[i][0];
@@ -141,10 +152,9 @@ else if(move2<move1 && move2<-0.2 && c1<c2 && c2<c3){
     dir="💥";
 }
 
-// ===== TREND FILTER =====
 let valid = false;
-if(trendDir==="UP" && dir==="🚀") valid = true;
-if(trendDir==="DOWN" && dir==="💥") valid = true;
+if(trendDir==="UP" && dir==="🚀") valid=true;
+if(trendDir==="DOWN" && dir==="💥") valid=true;
 
 if(dir && valid && lastSignalDirection[symbol] !== dir){
 
@@ -154,7 +164,8 @@ if(dir && valid && lastSignalDirection[symbol] !== dir){
         symbol,
         time: new Date(time).toLocaleTimeString(),
         price: c1,
-        dir
+        dir,
+        maxMove: 0
     });
 
     if(history.length > 30) history.shift();
@@ -192,7 +203,7 @@ else if(move2<move1 && move2<-0.2 && c1<c2 && c2<c3){
     dir="💥";
 }
 
-// ===== TREND LIVE =====
+// ===== TREND =====
 let kFull = await fetch(
 `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=5m&limit=100`
 ).then(r=>r.json());
@@ -206,14 +217,13 @@ let currentPrice = parseFloat(kFull[kFull.length-1][4]);
 
 let trend = ((currentPrice - startPrice)/startPrice)*100;
 
-let trendDir = "NEUTRAL";
-if(trend > 1) trendDir = "UP";
-else if(trend < -1) trendDir = "DOWN";
+let trendDir = "UP";
+if(trend < -1) trendDir="DOWN";
+if(Math.abs(trend) < 1) trendDir="NEUTRAL";
 
-// ===== FILTER =====
 let valid = false;
-if(trendDir==="UP" && dir==="🚀") valid = true;
-if(trendDir==="DOWN" && dir==="💥") valid = true;
+if(trendDir==="UP" && dir==="🚀") valid=true;
+if(trendDir==="DOWN" && dir==="💥") valid=true;
 
 if(dir && valid){
 
@@ -235,7 +245,8 @@ if(lastSignalDirection[symbol] !== dir){
         symbol,
         time: new Date().toLocaleTimeString(),
         price: c1,
-        dir
+        dir,
+        maxMove: 0
     });
 
     if(history.length > 30) history.shift();
@@ -259,6 +270,18 @@ let current = parseFloat(priceNow.price);
 let change = ((current - h.price)/h.price)*100;
 if(h.dir==="💥") change = -change;
 
+// update max
+if(change > h.maxMove){
+    h.maxMove = change;
+}
+
+let drawdown = h.maxMove - change;
+
+// UI class
+let strengthClass = "weak";
+if(change > h.maxMove * 0.8) strengthClass="strong";
+else if(drawdown > 2) strengthClass="pullback";
+
 historyHTML += `
 <tr>
 <td>${h.symbol}</td>
@@ -266,6 +289,8 @@ historyHTML += `
 <td>${h.dir}</td>
 <td>${h.price.toFixed(4)}</td>
 <td class="${change>=0?'positive':'negative'}">${change.toFixed(2)}%</td>
+<td class="positive">${h.maxMove.toFixed(2)}%</td>
+<td class="${strengthClass}">${drawdown.toFixed(2)}%</td>
 </tr>`;
 }
 
