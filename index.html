@@ -131,8 +131,25 @@ let move2=((c1-c2)/c2)*100;
 
 let dir=null;
 
-if(move2>move1 && move2>0.2 && c1>c2 && c2>c3) dir="🚀";
-if(move2<move1 && move2<-0.2 && c1<c2 && c2<c3) dir="💥";
+// STRONG LONG
+if(
+    move2 > move1 &&
+    move2 > 0.5 &&   // increased threshold
+    c1 > c2 && c2 > c3 &&
+    ((c1 - c2) / c2) * 100 > 0.3
+){
+    dir = "🚀";
+}
+
+// STRONG SHORT
+if(
+    move2 < move1 &&
+    move2 < -0.5 &&
+    c1 < c2 && c2 < c3 &&
+    ((c2 - c1) / c2) * 100 > 0.3
+){
+    dir = "💥";
+}
 
 if(dir && !signalFound){
 
