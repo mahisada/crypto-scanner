@@ -96,7 +96,7 @@ let ticker=await fetch('https://fapi.binance.com/fapi/v1/ticker/24hr').then(r=>r
 let coins=ticker
 .filter(c=>c.symbol.endsWith("USDT"))
 .sort((a,b)=>b.quoteVolume-a.quoteVolume)
-.slice(0,30);
+.slice(0,15);
 
 // ===== GAINERS / LOSERS =====
 render(coins.sort((a,b)=>b.priceChangePercent-a.priceChangePercent).slice(0,5),"gainers");
