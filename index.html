@@ -62,7 +62,7 @@ th { background:#222; }
 
 let blacklist = [];
 let history = [];
-let activeSignals = {};
+let lastSignalDirection = {};
 let historyLoaded = false;
 
 // ===== IST START TIME =====
@@ -126,19 +126,20 @@ else if(move2<move1 && move2<-0.2 && c1<c2 && c2<c3){
     dir="💥";
 }
 
-if(dir){
+// 🔥 FIX: only log if direction changed
+if(dir && lastSignalDirection[symbol] !== dir){
 
-history.push({
-    symbol,
-    time: new Date(time).toLocaleTimeString(),
-    price: c1,
-    dir,
-    change: 0
-});
+    lastSignalDirection[symbol] = dir;
 
-activeSignals[symbol] = true;
+    history.push({
+        symbol,
+        time: new Date(time).toLocaleTimeString(),
+        price: c1,
+        dir,
+        change: 0
+    });
 
-if(history.length > 30) history.shift();
+    if(history.length > 30) history.shift();
 }
 }
 }
@@ -187,8 +188,10 @@ momentumHTML += `
 <td>${status}</td>
 </tr>`;
 
-if(!activeSignals[symbol]){
-    activeSignals[symbol] = true;
+// 🔥 FIX for LIVE
+if(lastSignalDirection[symbol] !== dir){
+
+    lastSignalDirection[symbol] = dir;
 
     history.push({
         symbol,
