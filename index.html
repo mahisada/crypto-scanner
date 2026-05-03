@@ -2,28 +2,56 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Momentum Scanner FINAL</title>
+<title>Momentum Scanner PRO</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
 <style>
 body { font-family: Arial; background:#0b0b0b; color:white; padding:10px; }
 h2 { text-align:center; }
 
-.panel { background:#111; padding:10px; border-radius:10px; margin-bottom:12px; }
+.panel {
+    background:#111;
+    padding:12px;
+    border-radius:12px;
+    margin-bottom:14px;
+}
 
 table { width:100%; border-collapse:collapse; }
-th, td { padding:6px; text-align:center; font-size:12px; }
+
+th, td {
+    padding:8px;
+    text-align:center;
+    font-size:12px;
+}
+
 th { background:#222; }
 
 .positive { color:#00ff9c; }
 .negative { color:#ff4d4d; }
+.max { color:#00e5ff; }
+.dd { color:#f1c40f; }
+
+.tag-strong { color:#00ff9c; font-weight:bold; }
+.tag-pull { color:#f1c40f; font-weight:bold; }
+.tag-done { color:#ff4d4d; font-weight:bold; }
+
+.bar {
+    height:6px;
+    background:#222;
+    border-radius:5px;
+    overflow:hidden;
+}
+.bar-fill {
+    height:100%;
+    background:#00ff9c;
+}
 </style>
 </head>
 
 <body>
 
-<h2>🚀 Momentum Scanner FINAL</h2>
-<div id="lastUpdated">--</div>
+<h2>🚀 Momentum Scanner PRO</h2>
+<div id="lastUpdated"></div>
 
 <div class="panel">
 <b>📈 Top Gainers</b>
@@ -44,12 +72,17 @@ th { background:#222; }
 </div>
 
 <div class="panel">
-<b>📊 History (Since 5:30 IST)</b>
+<b>📊 Trade Opportunities</b>
 <table>
 <thead>
 <tr>
-<th>Symbol</th><th>Time</th><th>Dir</th>
-<th>Entry</th><th>Now%</th><th>Max%</th>
+<th>Symbol</th>
+<th>Dir</th>
+<th>Now%</th>
+<th>Max%</th>
+<th>DD%</th>
+<th>Progress</th>
+<th>Status</th>
 </tr>
 </thead>
 <tbody id="history"></tbody>
@@ -69,6 +102,14 @@ function getStartTime(){
     let ist=new Date(utc+istOffset);
     ist.setHours(5,30,0,0);
     return ist.getTime();
+}
+
+function getStatus(change, max, dd){
+    if(max < 1) return {text:"⚪ Dead", cls:"tag-done"};
+    let progress = change / max;
+    if(progress > 0.8) return {text:"🟢 STRONG", cls:"tag-strong"};
+    if(dd > 2) return {text:"🟡 PULLBACK", cls:"tag-pull"};
+    return {text:"🔴 DONE", cls:"tag-done"};
 }
 
 async function fetchData(){
@@ -124,7 +165,6 @@ let entryPrice=c1;
 let maxPrice=c1;
 let minPrice=c1;
 
-// FULL MAX CALC
 for(let j=i;j<klines.length;j++){
 let high=parseFloat(klines[j][2]);
 let low=parseFloat(klines[j][3]);
@@ -138,8 +178,7 @@ time:new Date(time).toLocaleTimeString(),
 price:entryPrice,
 dir,
 maxPrice,
-minPrice,
-lastTime:klines[klines.length-1][0]
+minPrice
 });
 
 lastSignal[symbol]=dir;
@@ -150,7 +189,7 @@ lastSignal[symbol]=dir;
 historyLoaded=true;
 }
 
-// ===== MOMENTUM + LIVE =====
+// ===== MOMENTUM =====
 let momentumHTML="";
 
 for(let coin of coins){
@@ -179,11 +218,10 @@ momentumHTML+=`
 <tr>
 <td>${symbol}</td>
 <td>${dir}</td>
-<td>${move2.toFixed(2)}%</td>
+<td class="${move2>=0?'positive':'negative'}">${move2.toFixed(2)}%</td>
 </tr>`;
 
 if(!lastSignal[symbol]){
-
 lastSignal[symbol]=dir;
 
 history.push({
@@ -192,8 +230,7 @@ time:new Date().toLocaleTimeString(),
 price:c1,
 dir,
 maxPrice:c1,
-minPrice:c1,
-lastTime:k[3][0]
+minPrice:c1
 });
 }
 }
@@ -201,8 +238,8 @@ lastTime:k[3][0]
 
 document.getElementById("momentum").innerHTML=momentumHTML;
 
-// ===== UPDATE HISTORY =====
-let historyHTML="";
+// ===== UPDATE + RENDER =====
+let rows=[];
 
 for(let h of history){
 
@@ -227,24 +264,52 @@ maxMove=((h.price-h.minPrice)/h.price)*100;
 change=-change;
 }
 
-historyHTML+=`
-<tr>
-<td>${h.symbol}</td>
-<td>${h.time}</td>
-<td>${h.dir}</td>
-<td>${h.price.toFixed(4)}</td>
-<td>${change.toFixed(2)}%</td>
-<td>${maxMove.toFixed(2)}%</td>
-</tr>`;
+let dd = maxMove - change;
+let status = getStatus(change, maxMove, dd);
+let progress = maxMove>0 ? (change/maxMove)*100 : 0;
+
+rows.push({
+...h, change, maxMove, dd, status, progress
+});
 }
 
-document.getElementById("history").innerHTML=historyHTML;
+// SORT BEST FIRST
+rows.sort((a,b)=>{
+let scoreA = a.maxMove - a.dd;
+let scoreB = b.maxMove - b.dd;
+return scoreB - scoreA;
+});
+
+// RENDER
+let html="";
+
+rows.forEach(r=>{
+html+=`
+<tr>
+<td>${r.symbol}</td>
+<td>${r.dir}</td>
+
+<td class="${r.change>=0?'positive':'negative'}">${r.change.toFixed(2)}%</td>
+<td class="max">${r.maxMove.toFixed(2)}%</td>
+<td class="dd">${r.dd.toFixed(2)}%</td>
+
+<td>
+<div class="bar">
+<div class="bar-fill" style="width:${Math.min(r.progress,100)}%"></div>
+</div>
+</td>
+
+<td class="${r.status.cls}">${r.status.text}</td>
+</tr>`;
+});
+
+document.getElementById("history").innerHTML=html;
 
 document.getElementById("lastUpdated").innerText="Updated: "+new Date().toLocaleTimeString();
 
 }
 
-function render(data,id,pos){
+function render(data,id){
 let html="";
 data.forEach(c=>{
 html+=`<tr><td>${c.symbol}</td><td>${parseFloat(c.priceChangePercent).toFixed(2)}%</td></tr>`;
