@@ -96,7 +96,7 @@ let ticker=await fetch('https://fapi.binance.com/fapi/v1/ticker/24hr').then(r=>r
 let coins=ticker
 .filter(c=>c.symbol.endsWith("USDT"))
 .sort((a,b)=>b.quoteVolume-a.quoteVolume)
-.slice(0,15);
+.slice(0,30);
 
 // ===== GAINERS / LOSERS =====
 render(coins.sort((a,b)=>b.priceChangePercent-a.priceChangePercent).slice(0,5),"gainers");
@@ -203,8 +203,25 @@ let move2=((c1-c2)/c2)*100;
 
 let dir=null;
 
-if(move2>move1 && move2>0.2 && c1>c2 && c2>c3) dir="🚀";
-if(move2<move1 && move2<-0.2 && c1<c2 && c2<c3) dir="💥";
+// STRONG LONG
+if(
+    move2 > move1 &&
+    move2 > 0.5 &&   // increased threshold
+    c1 > c2 && c2 > c3 &&
+    ((c1 - c2) / c2) * 100 > 0.3
+){
+    dir = "🚀";
+}
+
+// STRONG SHORT
+if(
+    move2 < move1 &&
+    move2 < -0.5 &&
+    c1 < c2 && c2 < c3 &&
+    ((c2 - c1) / c2) * 100 > 0.3
+){
+    dir = "💥";
+}
 
 if(dir){
 
