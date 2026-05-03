@@ -27,7 +27,7 @@ th { background:#222; }
 
 <body>
 
-<h2>🚀 Momentum Scanner</h2>
+<h2>🚀 Momentum Scanner (Trend Filtered)</h2>
 <div id="lastUpdated">--</div>
 
 <div class="panel">
@@ -43,9 +43,10 @@ th { background:#222; }
 </div>
 
 <div class="panel">
-<b>🚀 Momentum Signals</b>
+<b>🚀 Momentum Signals (VALID ONLY)</b>
 <table><thead><tr><th>Symbol</th><th>Dir</th><th>5m%</th><th>Status</th></tr></thead>
-<tbody id="momentum"></tbody></table>
+<tbody id="momentum"></tbody>
+</table>
 </div>
 
 <div class="panel">
@@ -105,6 +106,20 @@ let klines = await fetch(
 `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=5m&limit=300`
 ).then(r=>r.json());
 
+// ===== TREND CALC =====
+let startCandle = klines.find(k => k[0] >= startTime);
+if(!startCandle) continue;
+
+let startPrice = parseFloat(startCandle[4]);
+let currentPrice = parseFloat(klines[klines.length-1][4]);
+
+let trend = ((currentPrice - startPrice)/startPrice)*100;
+
+let trendDir = "NEUTRAL";
+if(trend > 1) trendDir = "UP";
+else if(trend < -1) trendDir = "DOWN";
+
+// ===== LOOP SIGNALS =====
 for(let i=3;i<klines.length;i++){
 
 let time = klines[i][0];
@@ -126,8 +141,12 @@ else if(move2<move1 && move2<-0.2 && c1<c2 && c2<c3){
     dir="💥";
 }
 
-// 🔥 FIX: only log if direction changed
-if(dir && lastSignalDirection[symbol] !== dir){
+// ===== TREND FILTER =====
+let valid = false;
+if(trendDir==="UP" && dir==="🚀") valid = true;
+if(trendDir==="DOWN" && dir==="💥") valid = true;
+
+if(dir && valid && lastSignalDirection[symbol] !== dir){
 
     lastSignalDirection[symbol] = dir;
 
@@ -135,8 +154,7 @@ if(dir && lastSignalDirection[symbol] !== dir){
         symbol,
         time: new Date(time).toLocaleTimeString(),
         price: c1,
-        dir,
-        change: 0
+        dir
     });
 
     if(history.length > 30) history.shift();
@@ -174,11 +192,32 @@ else if(move2<move1 && move2<-0.2 && c1<c2 && c2<c3){
     dir="💥";
 }
 
-let status="";
+// ===== TREND LIVE =====
+let kFull = await fetch(
+`https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=5m&limit=100`
+).then(r=>r.json());
 
-if(dir){
+let startTime = getStartTimeIST();
+let startCandle = kFull.find(k => k[0] >= startTime);
+if(!startCandle) continue;
 
-status = Math.abs(move2)>1.2 ? "Late" : "Early";
+let startPrice = parseFloat(startCandle[4]);
+let currentPrice = parseFloat(kFull[kFull.length-1][4]);
+
+let trend = ((currentPrice - startPrice)/startPrice)*100;
+
+let trendDir = "NEUTRAL";
+if(trend > 1) trendDir = "UP";
+else if(trend < -1) trendDir = "DOWN";
+
+// ===== FILTER =====
+let valid = false;
+if(trendDir==="UP" && dir==="🚀") valid = true;
+if(trendDir==="DOWN" && dir==="💥") valid = true;
+
+if(dir && valid){
+
+let status = Math.abs(move2)>1.2 ? "Late" : "Early";
 
 momentumHTML += `
 <tr>
@@ -188,7 +227,6 @@ momentumHTML += `
 <td>${status}</td>
 </tr>`;
 
-// 🔥 FIX for LIVE
 if(lastSignalDirection[symbol] !== dir){
 
     lastSignalDirection[symbol] = dir;
@@ -197,8 +235,7 @@ if(lastSignalDirection[symbol] !== dir){
         symbol,
         time: new Date().toLocaleTimeString(),
         price: c1,
-        dir,
-        change: 0
+        dir
     });
 
     if(history.length > 30) history.shift();
@@ -239,7 +276,6 @@ document.getElementById("lastUpdated").innerText =
 
 }
 
-// SIMPLE TABLE
 function renderSimple(data,id,isGain){
 let html="";
 data.forEach(c=>{
