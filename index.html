@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Momentum Scanner Pro+</title>
+<title>Momentum Scanner Pro++</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
 <style>
@@ -32,7 +32,7 @@ th { background:#222; }
 
 <body>
 
-<h2>🚀 Momentum Scanner Pro+</h2>
+<h2>🚀 Momentum Scanner Pro++</h2>
 <div id="lastUpdated">--</div>
 
 <div class="panel">
@@ -56,7 +56,7 @@ th { background:#222; }
 </div>
 
 <div class="panel">
-<b>📊 Signal History (Max Tracking)</b>
+<b>📊 Signal History (Accurate Max Tracking)</b>
 <table>
 <thead>
 <tr>
@@ -100,13 +100,10 @@ let coins = ticker
 .slice(0,15);
 
 // ===== GAINERS / LOSERS =====
-let gainers = [...coins].sort((a,b)=>b.priceChangePercent-a.priceChangePercent).slice(0,5);
-let losers = [...coins].sort((a,b)=>a.priceChangePercent-b.priceChangePercent).slice(0,5);
+renderSimple(coins.sort((a,b)=>b.priceChangePercent-a.priceChangePercent).slice(0,5),"gainers",true);
+renderSimple(coins.sort((a,b)=>a.priceChangePercent-b.priceChangePercent).slice(0,5),"losers",false);
 
-renderSimple(gainers,"gainers",true);
-renderSimple(losers,"losers",false);
-
-// ===== HISTORY BACK-CALC =====
+// ===== HISTORY BACK CALC =====
 if(!historyLoaded){
 
 let startTime = getStartTimeIST();
@@ -128,52 +125,49 @@ let currentPrice = parseFloat(klines[klines.length-1][4]);
 let trend = ((currentPrice - startPrice)/startPrice)*100;
 
 let trendDir = "NEUTRAL";
-if(trend > 1) trendDir = "UP";
-else if(trend < -1) trendDir = "DOWN";
+if(trend > 1) trendDir="UP";
+else if(trend < -1) trendDir="DOWN";
 
 for(let i=3;i<klines.length;i++){
 
 let time = klines[i][0];
 if(time < startTime) continue;
 
-let c1 = parseFloat(klines[i][4]);
-let c2 = parseFloat(klines[i-1][4]);
-let c3 = parseFloat(klines[i-2][4]);
+let c1=parseFloat(klines[i][4]);
+let c2=parseFloat(klines[i-1][4]);
+let c3=parseFloat(klines[i-2][4]);
 
 let move1=((c2-c3)/c3)*100;
 let move2=((c1-c2)/c2)*100;
 
 let dir=null;
 
-if(move2>move1 && move2>0.2 && c1>c2 && c2>c3){
-    dir="🚀";
-}
-else if(move2<move1 && move2<-0.2 && c1<c2 && c2<c3){
-    dir="💥";
-}
+if(move2>move1 && move2>0.2 && c1>c2 && c2>c3) dir="🚀";
+else if(move2<move1 && move2<-0.2 && c1<c2 && c2<c3) dir="💥";
 
-let valid = false;
+let valid=false;
 if(trendDir==="UP" && dir==="🚀") valid=true;
 if(trendDir==="DOWN" && dir==="💥") valid=true;
 
-if(dir && valid && lastSignalDirection[symbol] !== dir){
+if(dir && valid && lastSignalDirection[symbol]!==dir){
 
-    lastSignalDirection[symbol] = dir;
+    lastSignalDirection[symbol]=dir;
 
     history.push({
         symbol,
-        time: new Date(time).toLocaleTimeString(),
-        price: c1,
+        time:new Date(time).toLocaleTimeString(),
+        price:c1,
         dir,
-        maxMove: 0
+        maxPrice:c1,
+        minPrice:c1
     });
 
-    if(history.length > 30) history.shift();
+    if(history.length>30) history.shift();
 }
 }
 }
 
-historyLoaded = true;
+historyLoaded=true;
 }
 
 // ===== MOMENTUM LIVE =====
@@ -181,55 +175,47 @@ let momentumHTML="";
 
 for(let coin of coins){
 
-let symbol = coin.symbol;
+let symbol=coin.symbol;
 
-let k = await fetch(
-`https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=5m&limit=4`
-).then(r=>r.json());
+let k=await fetch(`https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=5m&limit=4`).then(r=>r.json());
 
-let c1 = parseFloat(k[3][4]);
-let c2 = parseFloat(k[2][4]);
-let c3 = parseFloat(k[1][4]);
+let c1=parseFloat(k[3][4]);
+let c2=parseFloat(k[2][4]);
+let c3=parseFloat(k[1][4]);
 
 let move1=((c2-c3)/c3)*100;
 let move2=((c1-c2)/c2)*100;
 
 let dir=null;
 
-if(move2>move1 && move2>0.2 && c1>c2 && c2>c3){
-    dir="🚀";
-}
-else if(move2<move1 && move2<-0.2 && c1<c2 && c2<c3){
-    dir="💥";
-}
+if(move2>move1 && move2>0.2 && c1>c2 && c2>c3) dir="🚀";
+else if(move2<move1 && move2<-0.2 && c1<c2 && c2<c3) dir="💥";
 
-// ===== TREND =====
-let kFull = await fetch(
-`https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=5m&limit=100`
-).then(r=>r.json());
+// trend
+let kFull=await fetch(`https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=5m&limit=100`).then(r=>r.json());
 
-let startTime = getStartTimeIST();
-let startCandle = kFull.find(k => k[0] >= startTime);
+let startTime=getStartTimeIST();
+let startCandle=kFull.find(k=>k[0]>=startTime);
 if(!startCandle) continue;
 
-let startPrice = parseFloat(startCandle[4]);
-let currentPrice = parseFloat(kFull[kFull.length-1][4]);
+let startPrice=parseFloat(startCandle[4]);
+let currentPrice=parseFloat(kFull[kFull.length-1][4]);
 
-let trend = ((currentPrice - startPrice)/startPrice)*100;
+let trend=((currentPrice-startPrice)/startPrice)*100;
 
-let trendDir = "UP";
-if(trend < -1) trendDir="DOWN";
-if(Math.abs(trend) < 1) trendDir="NEUTRAL";
+let trendDir="NEUTRAL";
+if(trend>1) trendDir="UP";
+else if(trend<-1) trendDir="DOWN";
 
-let valid = false;
+let valid=false;
 if(trendDir==="UP" && dir==="🚀") valid=true;
 if(trendDir==="DOWN" && dir==="💥") valid=true;
 
 if(dir && valid){
 
-let status = Math.abs(move2)>1.2 ? "Late" : "Early";
+let status=Math.abs(move2)>1.2?"Late":"Early";
 
-momentumHTML += `
+momentumHTML+=`
 <tr>
 <td>${symbol}</td>
 <td>${dir}</td>
@@ -237,67 +223,75 @@ momentumHTML += `
 <td>${status}</td>
 </tr>`;
 
-if(lastSignalDirection[symbol] !== dir){
+if(lastSignalDirection[symbol]!==dir){
 
-    lastSignalDirection[symbol] = dir;
+    lastSignalDirection[symbol]=dir;
 
     history.push({
         symbol,
-        time: new Date().toLocaleTimeString(),
-        price: c1,
+        time:new Date().toLocaleTimeString(),
+        price:c1,
         dir,
-        maxMove: 0
+        maxPrice:c1,
+        minPrice:c1
     });
 
-    if(history.length > 30) history.shift();
+    if(history.length>30) history.shift();
 }
 }
 }
 
-document.getElementById("momentum").innerHTML = momentumHTML;
+document.getElementById("momentum").innerHTML=momentumHTML;
 
-// ===== UPDATE HISTORY =====
+// ===== UPDATE HISTORY (ACCURATE) =====
 let historyHTML="";
 
 for(let h of history){
 
-let priceNow = await fetch(
-`https://fapi.binance.com/fapi/v1/ticker/price?symbol=${h.symbol}`
-).then(r=>r.json());
+let k=await fetch(`https://fapi.binance.com/fapi/v1/klines?symbol=${h.symbol}&interval=5m&limit=2`).then(r=>r.json());
 
-let current = parseFloat(priceNow.price);
+let high=parseFloat(k[1][2]);
+let low=parseFloat(k[1][3]);
+let current=parseFloat(k[1][4]);
 
-let change = ((current - h.price)/h.price)*100;
-if(h.dir==="💥") change = -change;
+// update extremes
+if(high > h.maxPrice) h.maxPrice = high;
+if(low < h.minPrice) h.minPrice = low;
 
-// update max
-if(change > h.maxMove){
-    h.maxMove = change;
+let change=((current - h.price)/h.price)*100;
+
+let maxMove;
+
+if(h.dir==="🚀"){
+    maxMove=((h.maxPrice - h.price)/h.price)*100;
+}
+else{
+    maxMove=((h.price - h.minPrice)/h.price)*100;
+    change = -change;
 }
 
-let drawdown = h.maxMove - change;
+let drawdown=maxMove - change;
 
 // UI class
-let strengthClass = "weak";
-if(change > h.maxMove * 0.8) strengthClass="strong";
+let strengthClass="weak";
+if(change > maxMove*0.8) strengthClass="strong";
 else if(drawdown > 2) strengthClass="pullback";
 
-historyHTML += `
+historyHTML+=`
 <tr>
 <td>${h.symbol}</td>
 <td>${h.time}</td>
 <td>${h.dir}</td>
 <td>${h.price.toFixed(4)}</td>
 <td class="${change>=0?'positive':'negative'}">${change.toFixed(2)}%</td>
-<td class="positive">${h.maxMove.toFixed(2)}%</td>
+<td class="positive">${maxMove.toFixed(2)}%</td>
 <td class="${strengthClass}">${drawdown.toFixed(2)}%</td>
 </tr>`;
 }
 
-document.getElementById("history").innerHTML = historyHTML;
+document.getElementById("history").innerHTML=historyHTML;
 
-document.getElementById("lastUpdated").innerText =
-"Updated: " + new Date().toLocaleTimeString();
+document.getElementById("lastUpdated").innerText="Updated: "+new Date().toLocaleTimeString();
 
 }
 
