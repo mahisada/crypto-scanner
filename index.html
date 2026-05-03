@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Momentum Scanner Pro MAX</title>
+<title>Momentum Scanner FINAL</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
 <style>
@@ -17,29 +17,39 @@ th { background:#222; }
 
 .positive { color:#00ff9c; }
 .negative { color:#ff4d4d; }
-
-.strong { color:#00ff9c; font-weight:bold; }
-.pullback { color:#f1c40f; }
 </style>
 </head>
 
 <body>
 
-<h2>🚀 Momentum Scanner Pro MAX</h2>
+<h2>🚀 Momentum Scanner FINAL</h2>
 <div id="lastUpdated">--</div>
 
 <div class="panel">
-<b>📊 Signal History (Hybrid Tracking)</b>
+<b>📈 Top Gainers</b>
+<table><tbody id="gainers"></tbody></table>
+</div>
+
+<div class="panel">
+<b>📉 Top Losers</b>
+<table><tbody id="losers"></tbody></table>
+</div>
+
+<div class="panel">
+<b>🚀 Momentum</b>
+<table>
+<thead><tr><th>Symbol</th><th>Dir</th><th>5m%</th></tr></thead>
+<tbody id="momentum"></tbody>
+</table>
+</div>
+
+<div class="panel">
+<b>📊 History (Since 5:30 IST)</b>
 <table>
 <thead>
 <tr>
-<th>Symbol</th>
-<th>Time</th>
-<th>Dir</th>
-<th>Entry</th>
-<th>Now%</th>
-<th>Max%</th>
-<th>DD%</th>
+<th>Symbol</th><th>Time</th><th>Dir</th>
+<th>Entry</th><th>Now%</th><th>Max%</th>
 </tr>
 </thead>
 <tbody id="history"></tbody>
@@ -48,30 +58,55 @@ th { background:#222; }
 
 <script>
 
-let history = [];
-let lastSignalDirection = {};
+let history=[];
+let historyLoaded=false;
+let lastSignal={};
+
+function getStartTime(){
+    let now=new Date();
+    let istOffset=5.5*60*60*1000;
+    let utc=now.getTime()+now.getTimezoneOffset()*60000;
+    let ist=new Date(utc+istOffset);
+    ist.setHours(5,30,0,0);
+    return ist.getTime();
+}
 
 async function fetchData(){
 
-const ticker = await fetch('https://fapi.binance.com/fapi/v1/ticker/24hr')
-.then(r=>r.json());
+let ticker=await fetch('https://fapi.binance.com/fapi/v1/ticker/24hr').then(r=>r.json());
 
-let coins = ticker
+let coins=ticker
 .filter(c=>c.symbol.endsWith("USDT"))
-.sort((a,b)=>parseFloat(b.quoteVolume)-parseFloat(a.quoteVolume))
+.sort((a,b)=>b.quoteVolume-a.quoteVolume)
 .slice(0,15);
 
-// ===== SIGNAL DETECTION =====
+// ===== GAINERS / LOSERS =====
+render(coins.sort((a,b)=>b.priceChangePercent-a.priceChangePercent).slice(0,5),"gainers",true);
+render(coins.sort((a,b)=>a.priceChangePercent-b.priceChangePercent).slice(0,5),"losers",false);
+
+// ===== BACKFILL =====
+if(!historyLoaded){
+
+let start=getStartTime();
+
 for(let coin of coins){
 
-let symbol = coin.symbol;
+let symbol=coin.symbol;
 
-let k = await fetch(`https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=5m&limit=4`)
-.then(r=>r.json());
+let klines=await fetch(
+`https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=5m&limit=300`
+).then(r=>r.json());
 
-let c1 = parseFloat(k[3][4]);
-let c2 = parseFloat(k[2][4]);
-let c3 = parseFloat(k[1][4]);
+let signalFound=false;
+
+for(let i=3;i<klines.length;i++){
+
+let time=klines[i][0];
+if(time<start) continue;
+
+let c1=parseFloat(klines[i][4]);
+let c2=parseFloat(klines[i-1][4]);
+let c3=parseFloat(klines[i-2][4]);
 
 let move1=((c2-c3)/c3)*100;
 let move2=((c1-c2)/c2)*100;
@@ -79,82 +114,118 @@ let move2=((c1-c2)/c2)*100;
 let dir=null;
 
 if(move2>move1 && move2>0.2 && c1>c2 && c2>c3) dir="🚀";
-else if(move2<move1 && move2<-0.2 && c1<c2 && c2<c3) dir="💥";
+if(move2<move1 && move2<-0.2 && c1<c2 && c2<c3) dir="💥";
 
-if(dir && lastSignalDirection[symbol] !== dir){
+if(dir && !signalFound){
 
-    lastSignalDirection[symbol] = dir;
+signalFound=true;
 
-    let entryTime = k[3][0];
+let entryPrice=c1;
+let maxPrice=c1;
+let minPrice=c1;
 
-    // 🔥 FULL HISTORY FETCH (ONLY ONCE)
-    let klines = await fetch(
-    `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=5m&startTime=${entryTime}`
-    ).then(r=>r.json());
+// FULL MAX CALC
+for(let j=i;j<klines.length;j++){
+let high=parseFloat(klines[j][2]);
+let low=parseFloat(klines[j][3]);
+if(high>maxPrice) maxPrice=high;
+if(low<minPrice) minPrice=low;
+}
 
-    let entryPrice = c1;
-    let maxPrice = entryPrice;
-    let minPrice = entryPrice;
+history.push({
+symbol,
+time:new Date(time).toLocaleTimeString(),
+price:entryPrice,
+dir,
+maxPrice,
+minPrice,
+lastTime:klines[klines.length-1][0]
+});
 
-    klines.forEach(k=>{
-        let high = parseFloat(k[2]);
-        let low = parseFloat(k[3]);
-
-        if(high > maxPrice) maxPrice = high;
-        if(low < minPrice) minPrice = low;
-    });
-
-    history.push({
-        symbol,
-        time:new Date().toLocaleTimeString(),
-        price:entryPrice,
-        dir,
-        maxPrice,
-        minPrice,
-        lastCandleTime:k[3][0]
-    });
-
-    if(history.length>30) history.shift();
+lastSignal[symbol]=dir;
+}
 }
 }
 
-// ===== UPDATE HISTORY (LIGHT) =====
+historyLoaded=true;
+}
+
+// ===== MOMENTUM + LIVE =====
+let momentumHTML="";
+
+for(let coin of coins){
+
+let symbol=coin.symbol;
+
+let k=await fetch(
+`https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=5m&limit=4`
+).then(r=>r.json());
+
+let c1=parseFloat(k[3][4]);
+let c2=parseFloat(k[2][4]);
+let c3=parseFloat(k[1][4]);
+
+let move1=((c2-c3)/c3)*100;
+let move2=((c1-c2)/c2)*100;
+
+let dir=null;
+
+if(move2>move1 && move2>0.2 && c1>c2 && c2>c3) dir="🚀";
+if(move2<move1 && move2<-0.2 && c1<c2 && c2<c3) dir="💥";
+
+if(dir){
+
+momentumHTML+=`
+<tr>
+<td>${symbol}</td>
+<td>${dir}</td>
+<td>${move2.toFixed(2)}%</td>
+</tr>`;
+
+if(!lastSignal[symbol]){
+
+lastSignal[symbol]=dir;
+
+history.push({
+symbol,
+time:new Date().toLocaleTimeString(),
+price:c1,
+dir,
+maxPrice:c1,
+minPrice:c1,
+lastTime:k[3][0]
+});
+}
+}
+}
+
+document.getElementById("momentum").innerHTML=momentumHTML;
+
+// ===== UPDATE HISTORY =====
 let historyHTML="";
 
 for(let h of history){
 
-let k = await fetch(
+let k=await fetch(
 `https://fapi.binance.com/fapi/v1/klines?symbol=${h.symbol}&interval=5m&limit=2`
 ).then(r=>r.json());
 
-let candleTime = k[1][0];
-let high = parseFloat(k[1][2]);
-let low = parseFloat(k[1][3]);
-let current = parseFloat(k[1][4]);
+let high=parseFloat(k[1][2]);
+let low=parseFloat(k[1][3]);
+let current=parseFloat(k[1][4]);
 
-// update only on new candle
-if(candleTime !== h.lastCandleTime){
-    if(high > h.maxPrice) h.maxPrice = high;
-    if(low < h.minPrice) h.minPrice = low;
-    h.lastCandleTime = candleTime;
-}
+if(high>h.maxPrice) h.maxPrice=high;
+if(low<h.minPrice) h.minPrice=low;
 
-// calc
-let change = ((current - h.price)/h.price)*100;
-
+let change=((current-h.price)/h.price)*100;
 let maxMove;
 
 if(h.dir==="🚀"){
-    maxMove=((h.maxPrice - h.price)/h.price)*100;
+maxMove=((h.maxPrice-h.price)/h.price)*100;
 }else{
-    maxMove=((h.price - h.minPrice)/h.price)*100;
-    change = -change;
+maxMove=((h.price-h.minPrice)/h.price)*100;
+change=-change;
 }
-
-let drawdown = maxMove - change;
-
-let cls = "positive";
-if(drawdown > 2) cls="pullback";
 
 historyHTML+=`
 <tr>
@@ -162,17 +233,23 @@ historyHTML+=`
 <td>${h.time}</td>
 <td>${h.dir}</td>
 <td>${h.price.toFixed(4)}</td>
-<td class="${change>=0?'positive':'negative'}">${change.toFixed(2)}%</td>
-<td class="positive">${maxMove.toFixed(2)}%</td>
-<td class="${cls}">${drawdown.toFixed(2)}%</td>
+<td>${change.toFixed(2)}%</td>
+<td>${maxMove.toFixed(2)}%</td>
 </tr>`;
 }
 
-document.getElementById("history").innerHTML = historyHTML;
+document.getElementById("history").innerHTML=historyHTML;
 
-document.getElementById("lastUpdated").innerText =
-"Updated: "+new Date().toLocaleTimeString();
+document.getElementById("lastUpdated").innerText="Updated: "+new Date().toLocaleTimeString();
 
+}
+
+function render(data,id,pos){
+let html="";
+data.forEach(c=>{
+html+=`<tr><td>${c.symbol}</td><td>${parseFloat(c.priceChangePercent).toFixed(2)}%</td></tr>`;
+});
+document.getElementById(id).innerHTML=html;
 }
 
 setInterval(fetchData,60000);
