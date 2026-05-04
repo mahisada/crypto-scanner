@@ -39,12 +39,12 @@ th { background:#222; }
 <div id="lastUpdated"></div>
 
 <div class="panel">
-<b>📈 Top Gainers</b>
+<b>📈 Top Gainers (Since 5:30 IST)</b>
 <table><tbody id="gainers"></tbody></table>
 </div>
 
 <div class="panel">
-<b>📉 Top Losers</b>
+<b>📉 Top Losers (Since 5:30 IST)</b>
 <table><tbody id="losers"></tbody></table>
 </div>
 
@@ -98,14 +98,47 @@ let coins=ticker
 .sort((a,b)=>b.quoteVolume-a.quoteVolume)
 .slice(0,15);
 
-// ===== GAINERS / LOSERS =====
-render(coins.sort((a,b)=>b.priceChangePercent-a.priceChangePercent).slice(0,5),"gainers");
-render(coins.sort((a,b)=>a.priceChangePercent-b.priceChangePercent).slice(0,5),"losers");
+// ===== SESSION BASED GAINERS / LOSERS =====
+let start=getStartTime();
+let sessionData=[];
+
+for(let coin of coins){
+
+let symbol=coin.symbol;
+
+let klines=await fetch(
+`https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=5m&limit=300`
+).then(r=>r.json());
+
+let price530=null;
+
+// find 5:30 candle
+for(let k of klines){
+if(k[0]>=start){
+price530=parseFloat(k[1]); // OPEN
+break;
+}
+}
+
+let current=parseFloat(klines[klines.length-1][4]);
+
+if(price530){
+let change=((current-price530)/price530)*100;
+
+sessionData.push({
+symbol,
+change
+});
+}
+
+}
+
+// render gainers/losers
+render(sessionData.sort((a,b)=>b.change-a.change).slice(0,5),"gainers");
+render(sessionData.sort((a,b)=>a.change-b.change).slice(0,5),"losers");
 
 // ===== BACKFILL =====
 if(!historyLoaded){
-
-let start=getStartTime();
 
 for(let coin of coins){
 
@@ -134,7 +167,7 @@ let dir=null;
 // STRONG LONG
 if(
     move2 > move1 &&
-    move2 > 0.5 &&   // increased threshold
+    move2 > 0.5 &&
     c1 > c2 && c2 > c3 &&
     ((c1 - c2) / c2) * 100 > 0.3
 ){
@@ -159,6 +192,7 @@ let entryPrice=c1;
 let maxPrice=c1;
 let minPrice=c1;
 
+// FULL RANGE SCAN
 for(let j=i;j<klines.length;j++){
 let high=parseFloat(klines[j][2]);
 let low=parseFloat(klines[j][3]);
@@ -206,7 +240,7 @@ let dir=null;
 // STRONG LONG
 if(
     move2 > move1 &&
-    move2 > 0.5 &&   // increased threshold
+    move2 > 0.5 &&
     c1 > c2 && c2 > c3 &&
     ((c1 - c2) / c2) * 100 > 0.3
 ){
@@ -298,7 +332,10 @@ document.getElementById("lastUpdated").innerText="Updated: "+new Date().toLocale
 function render(data,id){
 let html="";
 data.forEach(c=>{
-html+=`<tr><td>${c.symbol}</td><td>${parseFloat(c.priceChangePercent).toFixed(2)}%</td></tr>`;
+html+=`<tr>
+<td>${c.symbol}</td>
+<td class="${c.change>=0?'positive':'negative'}">${c.change.toFixed(2)}%</td>
+</tr>`;
 });
 document.getElementById(id).innerHTML=html;
 }
