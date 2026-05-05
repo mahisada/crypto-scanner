@@ -299,17 +299,27 @@ let current=parseFloat(k[1][4]);
 if(high>h.maxPrice) h.maxPrice=high;
 if(low<h.minPrice) h.minPrice=low;
 
-let change=((current-h.price)/h.price)*100;
-let maxMove;
+let currentMove = ((current - h.price) / h.price) * 100;
 
-if(h.dir==="🚀"){
-maxMove=((h.maxPrice-h.price)/h.price)*100;
+// normalize direction
+let change, maxMove, dd;
+
+if(h.dir === "🚀"){
+
+    change = currentMove;
+
+    maxMove = ((h.maxPrice - h.price) / h.price) * 100;
+
 }else{
-maxMove=((h.price-h.minPrice)/h.price)*100;
-change=-change;
+
+    change = -currentMove;
+
+    maxMove = ((h.price - h.minPrice) / h.price) * 100;
+
 }
 
-let dd = maxMove - change;
+// drawdown = distance from peak
+dd = maxMove - change;
 
 html+=`
 <tr>
