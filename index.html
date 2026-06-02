@@ -85,7 +85,9 @@ th{
 <thead>
 <tr>
 <th>Symbol</th>
-<th>Move%</th>
+<th>India</th>
+<th>London</th>
+<th>NewYork</th>
 <th>Vol</th>
 </tr>
 </thead>
@@ -102,7 +104,9 @@ th{
 <thead>
 <tr>
 <th>Symbol</th>
-<th>Move%</th>
+<th>India</th>
+<th>London</th>
+<th>NewYork</th>
 <th>Vol</th>
 </tr>
 </thead>
@@ -209,6 +213,20 @@ function getATRStatus(atr){
     };
 }
 
+    function getUTCSessionTime(hour, minute){
+
+    let now = new Date();
+
+    return Date.UTC(
+        now.getUTCFullYear(),
+        now.getUTCMonth(),
+        now.getUTCDate(),
+        hour,
+        minute,
+        0,
+        0
+    );
+}
 async function fetchData(){
 
     let ticker = await fetch(
@@ -223,6 +241,8 @@ async function fetchData(){
     .slice(0,25);
 
     let start = getStartTime();
+    let londonStart = getUTCSessionTime(8,0);
+    let nyStart = getUTCSessionTime(13,30);
 
     let sessionData = [];
 
@@ -242,32 +262,59 @@ async function fetchData(){
 
         // ===== SESSION CHANGE =====
 
-        let price530 = null;
+        let indiaPrice = null;
+let londonPrice = null;
+let nyPrice = null;
 
-        for(let k of k5){
+for(let k of k5){
 
-            if(k[0] >= start){
+    let time = k[0];
 
-                price530 = parseFloat(k[1]);
+    if(indiaPrice === null && time >= start){
+        indiaPrice = parseFloat(k[1]);
+    }
 
-                break;
-            }
-        }
+    if(londonPrice === null && time >= londonStart){
+        londonPrice = parseFloat(k[1]);
+    }
 
-        let current =
-        parseFloat(k5[k5.length-1][4]);
+    if(nyPrice === null && time >= nyStart){
+        nyPrice = parseFloat(k[1]);
+    }
+}
 
-        if(price530){
+let current =
+parseFloat(k5[k5.length-1][4]);
 
-            let change =
-            ((current - price530) / price530) * 100;
+let indiaChange = null;
+let londonChange = null;
+let nyChange = null;
 
-            sessionData.push({
-                symbol,
-                change,
-                volume:parseFloat(coin.quoteVolume)
-            });
-        }
+if(indiaPrice){
+    indiaChange =
+    ((current - indiaPrice)/indiaPrice)*100;
+}
+
+if(Date.now() >= londonStart && londonPrice){
+    londonChange =
+    ((current - londonPrice)/londonPrice)*100;
+}
+
+if(Date.now() >= nyStart && nyPrice){
+    nyChange =
+    ((current - nyPrice)/nyPrice)*100;
+}
+
+if(indiaChange !== null){
+
+    sessionData.push({
+        symbol,
+        change:indiaChange,
+        london:londonChange,
+        ny:nyChange,
+        volume:parseFloat(coin.quoteVolume)
+    });
+}
 
         // ===== ATR SECTION =====
 
@@ -584,16 +631,32 @@ function render(data,id){
             <td>${c.symbol}</td>
 
             <td class="${
-                c.change>=0
-                ? 'positive'
-                : 'negative'
-            }">
-                ${c.change.toFixed(2)}%
-            </td>
+    c.change>=0
+    ? 'positive'
+    : 'negative'
+}">
+    ${c.change.toFixed(2)}%
+</td>
 
-            <td class="small">
-                ${formatVolume(c.volume)}
-            </td>
+<td class="${
+    c.london === null
+    ? 'small'
+    : (c.london>=0?'positive':'negative')
+}">
+    ${c.london === null ? '--' : c.london.toFixed(2)+'%'}
+</td>
+
+<td class="${
+    c.ny === null
+    ? 'small'
+    : (c.ny>=0?'positive':'negative')
+}">
+    ${c.ny === null ? '--' : c.ny.toFixed(2)+'%'}
+</td>
+
+<td class="small">
+    ${formatVolume(c.volume)}
+</td>
 
         </tr>`;
     });
