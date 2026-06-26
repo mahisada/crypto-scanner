@@ -421,37 +421,41 @@
 
       let sessionData = [];
 
-      for (let coin of coins) {
+      // Fetch klines in parallel for all filtered coins
+      await Promise.all(coins.map(async (coin) => {
         let symbol = coin.symbol;
+        try {
+          // Fetch 5m klines to calculate change since 5:30 IST reference frame
+          let k5 = await fetch(`https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=5m&limit=300`).then(r => r.json());
 
-        // Fetch 5m klines to calculate change since 5:30 IST reference frame
-        let k5 = await fetch(`https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=5m&limit=300`).then(r => r.json());
+          let indiaPrice = null, londonPrice = null, nyPrice = null;
 
-        let indiaPrice = null, londonPrice = null, nyPrice = null;
+          for (let k of k5) {
+            let t = k[0];
+            if (indiaPrice === null && t >= start) indiaPrice = parseFloat(k[1]);
+            if (londonPrice === null && t >= londonStart) londonPrice = parseFloat(k[1]);
+            if (nyPrice === null && t >= nyStart) nyPrice = parseFloat(k[1]);
+          }
 
-        for (let k of k5) {
-          let t = k[0];
-          if (indiaPrice === null && t >= start) indiaPrice = parseFloat(k[1]);
-          if (londonPrice === null && t >= londonStart) londonPrice = parseFloat(k[1]);
-          if (nyPrice === null && t >= nyStart) nyPrice = parseFloat(k[1]);
+          let current = parseFloat(k5[k5.length - 1][4]);
+
+          let indiaChange = indiaPrice ? ((current - indiaPrice) / indiaPrice) * 100 : null;
+          let londonChange = londonPrice ? ((current - londonPrice) / londonPrice) * 100 : null;
+          let nyChange = nyPrice ? ((current - nyPrice) / nyPrice) * 100 : null;
+
+          let distHigh = ((parseFloat(coin.highPrice) - current) / parseFloat(coin.highPrice)) * 100;
+          let distLow = ((current - parseFloat(coin.lowPrice)) / parseFloat(coin.lowPrice)) * 100;
+
+          if (indiaChange !== null) {
+            sessionData.push({
+              symbol, change: indiaChange, london: londonChange, ny: nyChange,
+              volume: parseFloat(coin.quoteVolume), distHigh, distLow
+            });
+          }
+        } catch (e) {
+          console.error(`Error fetching klines for ${symbol}:`, e);
         }
-
-        let current = parseFloat(k5[k5.length - 1][4]);
-
-        let indiaChange = indiaPrice ? ((current - indiaPrice) / indiaPrice) * 100 : null;
-        let londonChange = londonPrice ? ((current - londonPrice) / londonPrice) * 100 : null;
-        let nyChange = nyPrice ? ((current - nyPrice) / nyPrice) * 100 : null;
-
-        let distHigh = ((parseFloat(coin.highPrice) - current) / parseFloat(coin.highPrice)) * 100;
-        let distLow = ((current - parseFloat(coin.lowPrice)) / parseFloat(coin.lowPrice)) * 100;
-
-        if (indiaChange !== null) {
-          sessionData.push({
-            symbol, change: indiaChange, london: londonChange, ny: nyChange,
-            volume: parseFloat(coin.quoteVolume), distHigh, distLow
-          });
-        }
-      }
+      }));
 
       // Sort by Strategy logic (Top gainers and losers sorted by percent change since 5:30)
       let gainers = [...sessionData].sort((a, b) => b.change - a.change).slice(0, 12);
