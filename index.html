@@ -56,6 +56,7 @@
       font-weight: 700;
       background: linear-gradient(90deg, #00e5ff, #00e676);
       -webkit-background-clip: text;
+      background-clip: text;
       -webkit-text-fill-color: transparent;
       margin-bottom: 8px;
       letter-spacing: -0.5px;
@@ -316,31 +317,29 @@
     </table>
   </div>
 
-  <!-- Momentum Structure Panel -->
+  <!-- Top Movers Ranked Panel -->
   <div class="panel">
     <div class="panel-title momentum">
-      <span>⚡ Trend Structure</span>
-      <span class="small" style="font-weight: normal; font-size: 0.8rem;">(Active Movers Structure Alignment)</span>
+      <span>🔥 Ranked Top Movers (TOP_COUNT = 12)</span>
+      <span class="small" style="font-weight: normal; font-size: 0.8rem;">(Sorted by absolute daily return since 5:30 IST)</span>
     </div>
     <table>
       <thead>
         <tr>
-          <th class="sortable" onclick="sortMomentum('symbol')">Symbol ↕</th>
-          <th class="sortable" onclick="sortMomentum('structure')">15m Structure ↕</th>
-          <th class="sortable" onclick="sortMomentum('prev1H')">Prev 1H Change ↕</th>
-          <th class="sortable" onclick="sortMomentum('curr1H')">Curr 1H Change ↕</th>
+          <th>Rank</th>
+          <th>Symbol</th>
+          <th>Side</th>
+          <th>Daily Change</th>
+          <th>Boundary Distance</th>
+          <th>24H Vol</th>
         </tr>
       </thead>
-      <tbody id="momentum"></tbody>
+      <tbody id="rankedMovers"></tbody>
     </table>
   </div>
 </div>
 
 <script>
-  let momentumData = [];
-  let sortField = 'curr1H';
-  let sortAsc = false;
-  
   // Default list of ignored coins - will be updated from ignored_coins.txt if available
   let ignoredCoins = ["BTCUSDT", "ETCUSDT", "XAUUSDT", "SOLUSDT", "XAGUSDT"];
   const MIN_VOLUME_USDT = 90000000;
@@ -392,53 +391,6 @@
     return `<a class="btn-link" href="https://www.binance.com/en/futures/${symbol}" target="_blank">${symbol}</a>`;
   }
 
-  function sortMomentum(field) {
-    if (sortField === field) {
-      sortAsc = !sortAsc;
-    } else {
-      sortField = field;
-      sortAsc = false;
-    }
-    renderMomentum();
-  }
-
-  function renderMomentum() {
-    let rows = [...momentumData];
-
-    rows.sort((a, b) => {
-      let av = a[sortField];
-      let bv = b[sortField];
-
-      if (sortField === 'structure') {
-        let rank = { Bullish: 3, Neutral: 2, Bearish: 1 };
-        return sortAsc ? rank[av] - rank[bv] : rank[bv] - rank[av];
-      }
-
-      if (typeof av === 'string') {
-        return sortAsc ? av.localeCompare(bv) : bv.localeCompare(av);
-      }
-
-      return sortAsc ? av - bv : bv - av;
-    });
-
-    let html = '';
-    if (rows.length === 0) {
-      html = '<tr><td colspan="4" style="text-align: center;" class="small">No active movers loaded yet.</td></tr>';
-    } else {
-      rows.forEach(r => {
-        html += `
-        <tr>
-          <td>${getBinanceLink(r.symbol)}</td>
-          <td class="${r.structure === 'Bullish' ? 'positive' : r.structure === 'Bearish' ? 'negative' : 'small'}">${r.structure}</td>
-          <td class="${r.prev1H >= 0 ? 'positive' : 'negative'}">${r.prev1H.toFixed(2)}%</td>
-          <td class="${r.curr1H >= 0 ? 'positive' : 'negative'}">${r.curr1H.toFixed(2)}%</td>
-        </tr>`;
-      });
-    }
-
-    document.getElementById('momentum').innerHTML = html;
-  }
-
   async function fetchData() {
     try {
       // 1. Fetch Tickers from Binance Futures
@@ -454,6 +406,7 @@
         let emptyRow = '<tr><td colspan="6" style="text-align: center;" class="small">No active coins match the strategy criteria.</td></tr>';
         document.getElementById('gainers').innerHTML = emptyRow;
         document.getElementById('losers').innerHTML = emptyRow;
+        document.getElementById('rankedMovers').innerHTML = '<tr><td colspan="6" style="text-align: center;" class="small">No ranked movers.</td></tr>';
         
         document.getElementById('gainersLoader').style.display = 'none';
         document.getElementById('gainersTable').style.display = 'table';
@@ -467,7 +420,6 @@
       let nyStart = getUTCSessionTime(13, 30);
 
       let sessionData = [];
-      let momentumRows = [];
 
       for (let coin of coins) {
         let symbol = coin.symbol;
@@ -499,25 +451,6 @@
             volume: parseFloat(coin.quoteVolume), distHigh, distLow
           });
         }
-
-        // Fetch 15m structure
-        let k15 = await fetch(`https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=15m&limit=3`).then(r => r.json());
-
-        let s1 = parseFloat(k15[0][4]);
-        let s2 = parseFloat(k15[1][4]);
-        let s3 = parseFloat(k15[2][4]);
-
-        let structure = 'Neutral';
-        if (s3 > s2 && s2 > s1) structure = 'Bullish';
-        if (s3 < s2 && s2 < s1) structure = 'Bearish';
-
-        // Fetch 1h klines
-        let k1h = await fetch(`https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=1h&limit=2`).then(r => r.json());
-
-        let prev1H = ((parseFloat(k1h[0][4]) - parseFloat(k1h[0][1])) / parseFloat(k1h[0][1])) * 100;
-        let curr1H = ((parseFloat(k1h[1][4]) - parseFloat(k1h[1][1])) / parseFloat(k1h[1][1])) * 100;
-
-        momentumRows.push({ symbol, structure, prev1H, curr1H });
       }
 
       // Sort by Strategy logic (Top gainers and losers sorted by percent change since 5:30)
@@ -550,13 +483,39 @@
       });
       document.getElementById('losers').innerHTML = lhtml;
 
-      // Filter Trend Structure view to only include active top gainers/losers
-      let selected = new Set();
-      gainers.forEach(x => selected.add(x.symbol));
-      losers.forEach(x => selected.add(x.symbol));
+      // 3. Combine and rank candidates by absolute return descending (Top 12)
+      let allMovers = [];
+      sessionData.forEach(c => {
+        allMovers.push({
+          symbol: c.symbol,
+          side: c.change >= 0 ? 'BUY' : 'SELL',
+          change: c.change,
+          absChange: Math.abs(c.change),
+          boundaryDistance: c.change >= 0 ? c.distHigh : c.distLow,
+          volume: c.volume
+        });
+      });
 
-      momentumData = momentumRows.filter(x => selected.has(x.symbol));
-      renderMomentum();
+      // Sort by absolute change descending
+      allMovers.sort((a, b) => b.absChange - a.absChange);
+      let rankedMovers = allMovers.slice(0, 12);
+
+      let rhtml = '';
+      if (rankedMovers.length === 0) {
+        rhtml = '<tr><td colspan="6" style="text-align: center;" class="small">No ranked movers found.</td></tr>';
+      } else {
+        rankedMovers.forEach((c, idx) => {
+          rhtml += `<tr>
+            <td class="small">${idx + 1}</td>
+            <td>${getBinanceLink(c.symbol)}</td>
+            <td class="${c.side === 'BUY' ? 'positive' : 'negative'}">${c.side}</td>
+            <td class="${c.change >= 0 ? 'positive' : 'negative'}">${c.change.toFixed(2)}%</td>
+            <td class="${c.side === 'BUY' ? 'negative' : 'positive'}">${c.boundaryDistance.toFixed(2)}%</td>
+            <td>${formatVolume(c.volume)}</td>
+          </tr>`;
+        });
+      }
+      document.getElementById('rankedMovers').innerHTML = rhtml;
 
       // Clear loaders and display tables
       document.getElementById('gainersLoader').style.display = 'none';
@@ -582,3 +541,4 @@
 </script>
 </body>
 </html>
+
