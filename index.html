@@ -280,6 +280,7 @@
           <th>Symbol</th>
           <th>Side</th>
           <th>Daily Change</th>
+          <th>Yesterday Change</th>
           <th>Boundary Distance</th>
           <th>24H Vol</th>
         </tr>
@@ -428,6 +429,17 @@
           // Fetch 5m klines to calculate change since 5:30 IST reference frame
           let k5 = await fetch(`https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=5m&limit=300`).then(r => r.json());
 
+          // Fetch 1d klines to calculate yesterday's daily change
+          let k1d = await fetch(`https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=1d&limit=3`).then(r => r.json());
+          let yesterdayChange = 0.0;
+          if (k1d && k1d.length >= 2) {
+            let yOpen = parseFloat(k1d[k1d.length - 2][1]);
+            let yClose = parseFloat(k1d[k1d.length - 2][4]);
+            if (yOpen > 0) {
+              yesterdayChange = ((yClose - yOpen) / yOpen) * 100;
+            }
+          }
+
           let indiaPrice = null, londonPrice = null, nyPrice = null;
 
           for (let k of k5) {
@@ -449,7 +461,8 @@
           if (indiaChange !== null) {
             sessionData.push({
               symbol, change: indiaChange, london: londonChange, ny: nyChange,
-              volume: parseFloat(coin.quoteVolume), distHigh, distLow
+              volume: parseFloat(coin.quoteVolume), distHigh, distLow,
+              yesterdayChange: yesterdayChange
             });
           }
         } catch (e) {
@@ -494,6 +507,7 @@
           symbol: c.symbol,
           side: c.change >= 0 ? 'BUY' : 'SELL',
           change: c.change,
+          yesterdayChange: c.yesterdayChange,
           absChange: Math.abs(c.change),
           boundaryDistance: c.change >= 0 ? c.distHigh : c.distLow,
           volume: c.volume
@@ -506,7 +520,7 @@
 
       let rhtml = '';
       if (rankedMovers.length === 0) {
-        rhtml = '<tr><td colspan="6" style="text-align: center;" class="small">No ranked movers found.</td></tr>';
+        rhtml = '<tr><td colspan="7" style="text-align: center;" class="small">No ranked movers found.</td></tr>';
       } else {
         rankedMovers.forEach((c, idx) => {
           rhtml += `<tr>
@@ -514,6 +528,7 @@
             <td>${getBinanceLink(c.symbol)}</td>
             <td class="${c.side === 'BUY' ? 'positive' : 'negative'}">${c.side}</td>
             <td class="${c.change >= 0 ? 'positive' : 'negative'}">${c.change.toFixed(2)}%</td>
+            <td class="${c.yesterdayChange >= 0 ? 'positive' : 'negative'}">${c.yesterdayChange.toFixed(2)}%</td>
             <td class="${c.side === 'BUY' ? 'negative' : 'positive'}">${c.boundaryDistance.toFixed(2)}%</td>
             <td>${formatVolume(c.volume)}</td>
           </tr>`;
