@@ -241,6 +241,55 @@
       margin-bottom: 16px;
     }
 
+    .panel-title.exploding {
+      color: #ff9100;
+      text-shadow: 0 0 10px rgba(255, 145, 0, 0.2);
+    }
+
+    .badge-exploding {
+      display: inline-block;
+      padding: 3px 8px;
+      font-size: 0.7rem;
+      font-weight: 700;
+      border-radius: 4px;
+      background: rgba(255, 145, 0, 0.15);
+      border: 1px solid rgba(255, 145, 0, 0.3);
+      color: #ff9100;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      animation: alert-blink 1.5s infinite;
+    }
+
+    .badge-active {
+      display: inline-block;
+      padding: 3px 8px;
+      font-size: 0.7rem;
+      font-weight: 600;
+      border-radius: 4px;
+      background: rgba(0, 229, 255, 0.1);
+      border: 1px solid rgba(0, 229, 255, 0.2);
+      color: #00e5ff;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .vol-surge {
+      font-weight: 600;
+      color: #ff9100;
+      text-shadow: 0 0 8px rgba(255, 145, 0, 0.3);
+    }
+
+    .vol-high {
+      font-weight: 600;
+      color: #00e5ff;
+    }
+
+    @keyframes alert-blink {
+      0% { opacity: 0.7; }
+      50% { opacity: 1; box-shadow: 0 0 8px rgba(255, 145, 0, 0.4); }
+      100% { opacity: 0.7; }
+    }
+
     @keyframes spin {
       0% { transform: rotate(0deg); }
       100% { transform: rotate(360deg); }
@@ -265,6 +314,33 @@
     <div class="ignore-tags" id="ignoredTags">
       <span class="small">Loading settings...</span>
     </div>
+  </div>
+
+  <!-- Live Exploding Coins Panel -->
+  <div class="panel">
+    <div class="panel-title exploding">
+      <span>🚨 Live Exploding Coins (Micro-Momentum)</span>
+      <span class="small" style="font-weight: normal; font-size: 0.8rem;">(Spiking on 5m/15m change & relative volume)</span>
+    </div>
+    <div id="explodingLoader" class="loading-container">
+      <div class="spinner"></div>
+      <div>Scanning for real-time explosions...</div>
+    </div>
+    <table id="explodingTable" style="display: none;">
+      <thead>
+        <tr>
+          <th>Rank</th>
+          <th>Symbol</th>
+          <th>Move</th>
+          <th>Dir</th>
+          <th>5m Range</th>
+          <th>15m Range</th>
+          <th>Volume Surge</th>
+          <th>24H Vol</th>
+        </tr>
+      </thead>
+      <tbody id="exploding"></tbody>
+    </table>
   </div>
 
   <!-- Top Movers Ranked Panel -->
@@ -343,7 +419,8 @@
 <script>
   // Default list of ignored coins - will be updated from ignored_coins.txt if available
   let ignoredCoins = ["BTCUSDT", "ETCUSDT", "XAUUSDT", "SOLUSDT", "XAGUSDT"];
-  const MIN_VOLUME_USDT = 90000000;
+  const MIN_VOLUME_USDT = 50000000;
+  let previousExplodingRanks = {};
 
   async function loadIgnoredCoins() {
     try {
@@ -401,18 +478,21 @@
       let coins = ticker
         .filter(c => c.symbol.endsWith('USDT') && parseFloat(c.quoteVolume) >= MIN_VOLUME_USDT && !ignoredCoins.includes(c.symbol))
         .sort((a, b) => parseFloat(b.quoteVolume) - parseFloat(a.quoteVolume))
-        .slice(0, 30); // Limit to top 30 active instruments for resource efficiency
+        .slice(0, 50); // Limit to top 50 active instruments for resource efficiency
 
       if (coins.length === 0) {
         let emptyRow = '<tr><td colspan="6" style="text-align: center;" class="small">No active coins match the strategy criteria.</td></tr>';
         document.getElementById('gainers').innerHTML = emptyRow;
         document.getElementById('losers').innerHTML = emptyRow;
         document.getElementById('rankedMovers').innerHTML = '<tr><td colspan="6" style="text-align: center;" class="small">No ranked movers.</td></tr>';
+        document.getElementById('exploding').innerHTML = '<tr><td colspan="8" style="text-align: center;" class="small">No active data.</td></tr>';
         
         document.getElementById('gainersLoader').style.display = 'none';
         document.getElementById('gainersTable').style.display = 'table';
         document.getElementById('losersLoader').style.display = 'none';
         document.getElementById('losersTable').style.display = 'table';
+        document.getElementById('explodingLoader').style.display = 'none';
+        document.getElementById('explodingTable').style.display = 'table';
         return;
       }
 
@@ -421,6 +501,7 @@
       let nyStart = getUTCSessionTime(13, 30);
 
       let sessionData = [];
+      let explodingData = [];
 
       // Fetch klines in parallel for all filtered coins
       await Promise.all(coins.map(async (coin) => {
@@ -463,6 +544,49 @@
               symbol, change: indiaChange, london: londonChange, ny: nyChange,
               volume: parseFloat(coin.quoteVolume), distHigh, distLow,
               yesterdayChange: yesterdayChange
+            });
+          }
+
+          // Calculate Exploding (Micro-momentum) metrics
+          if (k5 && k5.length >= 22) {
+            let lastIdx = k5.length - 1;
+            let currentPrice = parseFloat(k5[lastIdx][4]);
+            let open5m = parseFloat(k5[lastIdx][1]);
+            let high5m = parseFloat(k5[lastIdx][2]);
+            let low5m = parseFloat(k5[lastIdx][3]);
+            
+            // 5m range: percentage height of the current 5m candle
+            let range5m = low5m > 0 ? ((high5m - low5m) / low5m) * 100 : 0;
+            let change5m = open5m > 0 ? ((currentPrice - open5m) / open5m) * 100 : 0;
+
+            // 15m range: high-low spread over the last 3 candles (15 mins)
+            let candles15m = k5.slice(Math.max(0, lastIdx - 2), lastIdx + 1);
+            let high15m = Math.max(...candles15m.map(k => parseFloat(k[2])));
+            let low15m = Math.min(...candles15m.map(k => parseFloat(k[3])));
+            let range15m = low15m > 0 ? ((high15m - low15m) / low15m) * 100 : 0;
+
+            // Calculate historical 5m volume average (past 20 completed candles)
+            let volSum = 0;
+            let volCount = 0;
+            for (let i = lastIdx - 20; i < lastIdx; i++) {
+              volSum += parseFloat(k5[i][5]); // Volume is at index 5 in Binance klines
+              volCount++;
+            }
+            let avgVol5m = volCount > 0 ? (volSum / volCount) : 1;
+            let curVol5m = parseFloat(k5[lastIdx][5]);
+            let rVol = avgVol5m > 0 ? (curVol5m / avgVol5m) : 0;
+
+            // Explosion Score = 5m range % * RVol
+            let explosionScore = range5m * rVol;
+
+            explodingData.push({
+              symbol,
+              change5m,
+              range5m,
+              range15m,
+              rVol,
+              explosionScore,
+              volume24h: parseFloat(coin.quoteVolume)
             });
           }
         } catch (e) {
@@ -535,6 +659,47 @@
         });
       }
       document.getElementById('rankedMovers').innerHTML = rhtml;
+
+      // 4. Render Exploding Coins (Micro-Momentum)
+      explodingData.sort((a, b) => b.explosionScore - a.explosionScore);
+      let topExploding = explodingData.slice(0, 8);
+
+      let ehtml = '';
+      if (topExploding.length === 0) {
+        ehtml = '<tr><td colspan="6" style="text-align: center;" class="small">No active data.</td></tr>';
+      } else {
+        topExploding.forEach(c => {
+          // Highlight as Exploding if RVol >= 2.2 and absolute 5m Change >= 0.6%
+          let isExploding = c.rVol >= 2.2 && Math.abs(c.change5m) >= 0.6;
+          // Highlight as Active if RVol >= 1.5 or absolute 5m Change >= 0.4%
+          let isMoving = c.rVol >= 1.5 || Math.abs(c.change5m) >= 0.4;
+          
+          let stateBadge = '';
+          if (isExploding) {
+            stateBadge = `<span class="badge-exploding">🚨 Exploding</span>`;
+          } else if (isMoving) {
+            stateBadge = `<span class="badge-active">⚡ Active</span>`;
+          } else {
+            stateBadge = `<span class="small">Stable</span>`;
+          }
+
+          let rVolClass = 'vol-normal';
+          if (c.rVol >= 3.0) rVolClass = 'vol-surge';
+          else if (c.rVol >= 1.5) rVolClass = 'vol-high';
+
+          ehtml += `<tr>
+            <td>${getBinanceLink(c.symbol)}</td>
+            <td>${stateBadge}</td>
+            <td class="${c.change5m >= 0 ? 'positive' : 'negative'}">${c.change5m >= 0 ? '+' : ''}${c.change5m.toFixed(2)}%</td>
+            <td class="${c.change15m >= 0 ? 'positive' : 'negative'}">${c.change15m >= 0 ? '+' : ''}${c.change15m.toFixed(2)}%</td>
+            <td class="${rVolClass}">${c.rVol.toFixed(1)}x</td>
+            <td>${formatVolume(c.volume24h)}</td>
+          </tr>`;
+        });
+      }
+      document.getElementById('exploding').innerHTML = ehtml;
+      document.getElementById('explodingLoader').style.display = 'none';
+      document.getElementById('explodingTable').style.display = 'table';
 
       // Clear loaders and display tables
       document.getElementById('gainersLoader').style.display = 'none';
