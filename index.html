@@ -290,6 +290,52 @@
       100% { opacity: 0.7; }
     }
 
+    .panel-title.streaks {
+      color: #e040fb;
+      text-shadow: 0 0 10px rgba(224, 64, 251, 0.2);
+    }
+
+    .streak-buy {
+      font-weight: 700;
+      color: var(--positive-neon);
+      text-shadow: 0 0 8px rgba(0, 230, 118, 0.3);
+    }
+
+    .streak-sell {
+      font-weight: 700;
+      color: var(--negative-neon);
+      text-shadow: 0 0 8px rgba(255, 23, 68, 0.3);
+    }
+
+    .breakout-buy {
+      font-weight: 600;
+      color: #00e676;
+      background: rgba(0, 230, 118, 0.1);
+      border: 1px solid rgba(0, 230, 118, 0.2);
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .breakout-sell {
+      font-weight: 600;
+      color: #ff1744;
+      background: rgba(255, 23, 68, 0.1);
+      border: 1px solid rgba(255, 23, 68, 0.2);
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .breakout-none {
+      color: var(--text-muted);
+      font-size: 0.8rem;
+    }
+
     @keyframes spin {
       0% { transform: rotate(0deg); }
       100% { transform: rotate(360deg); }
@@ -340,6 +386,30 @@
         </tr>
       </thead>
       <tbody id="exploding"></tbody>
+    </table>
+  </div>
+
+  <!-- 1H Trend Streaks Panel -->
+  <div class="panel">
+    <div class="panel-title streaks">
+      <span>📊 1H Trend Streaks & Breakouts</span>
+      <span class="small" style="font-weight: normal; font-size: 0.8rem;">(Hourly continuity streaks, trend ratios, and candle breakouts)</span>
+    </div>
+    <div id="streaksLoader" class="loading-container">
+      <div class="spinner" style="border-left-color: #e040fb;"></div>
+      <div>Analyzing hourly trend continuity...</div>
+    </div>
+    <table id="streaksTable" style="display: none;">
+      <thead>
+        <tr>
+          <th>Symbol</th>
+          <th>Consecutive Streak</th>
+          <th>12H Trend Ratio</th>
+          <th>1H Breakout State</th>
+          <th>24H Vol</th>
+        </tr>
+      </thead>
+      <tbody id="streaks"></tbody>
     </table>
   </div>
 
@@ -469,6 +539,41 @@
     return `<a class="btn-link" href="https://www.binance.com/en/futures/${symbol}" target="_blank">${symbol}</a>`;
   }
 
+  function getHourlyCandles(k5) {
+    let hourly = [];
+    let currentHourKey = null;
+    let activeCandle = null;
+    
+    for (let k of k5) {
+      let t = k[0];
+      let open = parseFloat(k[1]);
+      let high = parseFloat(k[2]);
+      let low = parseFloat(k[3]);
+      let close = parseFloat(k[4]);
+      let vol = parseFloat(k[5]);
+      
+      // Group by UTC hour timestamp boundary
+      let hourKey = Math.floor(t / 3600000);
+      
+      if (hourKey !== currentHourKey) {
+        if (activeCandle !== null) {
+          hourly.push(activeCandle);
+        }
+        currentHourKey = hourKey;
+        activeCandle = { open, high, low, close, volume: vol };
+      } else {
+        activeCandle.high = Math.max(activeCandle.high, high);
+        activeCandle.low = Math.min(activeCandle.low, low);
+        activeCandle.close = close;
+        activeCandle.volume += vol;
+      }
+    }
+    if (activeCandle !== null) {
+      hourly.push(activeCandle);
+    }
+    return hourly;
+  }
+
   async function fetchData() {
     try {
       // 1. Fetch Tickers from Binance Futures
@@ -486,6 +591,7 @@
         document.getElementById('losers').innerHTML = emptyRow;
         document.getElementById('rankedMovers').innerHTML = '<tr><td colspan="6" style="text-align: center;" class="small">No ranked movers.</td></tr>';
         document.getElementById('exploding').innerHTML = '<tr><td colspan="8" style="text-align: center;" class="small">No active data.</td></tr>';
+        document.getElementById('streaks').innerHTML = '<tr><td colspan="5" style="text-align: center;" class="small">No active data.</td></tr>';
         
         document.getElementById('gainersLoader').style.display = 'none';
         document.getElementById('gainersTable').style.display = 'table';
@@ -493,6 +599,8 @@
         document.getElementById('losersTable').style.display = 'table';
         document.getElementById('explodingLoader').style.display = 'none';
         document.getElementById('explodingTable').style.display = 'table';
+        document.getElementById('streaksLoader').style.display = 'none';
+        document.getElementById('streaksTable').style.display = 'table';
         return;
       }
 
@@ -502,6 +610,7 @@
 
       let sessionData = [];
       let explodingData = [];
+      let streaksData = [];
 
       // Fetch klines in parallel for all filtered coins
       await Promise.all(coins.map(async (coin) => {
@@ -586,6 +695,66 @@
               range15m,
               rVol,
               explosionScore,
+              volume24h: parseFloat(coin.quoteVolume)
+            });
+          }
+
+          // Calculate Trend Streaks & Breakouts (Reconstructing 1H candles from 5m data)
+          let hourly = getHourlyCandles(k5);
+          if (hourly && hourly.length >= 2) {
+            let buyStreak = 0;
+            let sellStreak = 0;
+            
+            // 1. Calculate consecutive close streaks
+            // Consecutive buy streak
+            for (let i = hourly.length - 1; i > 0; i--) {
+              if (hourly[i].close > hourly[i-1].close) {
+                buyStreak++;
+              } else {
+                break;
+              }
+            }
+            // Consecutive sell streak
+            for (let i = hourly.length - 1; i > 0; i--) {
+              if (hourly[i].close < hourly[i-1].close) {
+                sellStreak++;
+              } else {
+                break;
+              }
+            }
+            
+            // 2. Calculate 12H Trend Ratio
+            let upHours = 0;
+            let lookback = Math.min(12, hourly.length - 1);
+            let totalChecked = 0;
+            for (let i = hourly.length - 1; i > hourly.length - 1 - lookback && i > 0; i--) {
+              if (hourly[i].close > hourly[i-1].close) {
+                upHours++;
+              }
+              totalChecked++;
+            }
+            
+            // 3. 1H Breakout State (Current price vs previous hour's High/Low boundaries)
+            let currentPrice = parseFloat(k5[k5.length - 1][4]);
+            let prevHour = hourly[hourly.length - 2];
+            let breakoutState = 'None';
+            if (currentPrice > prevHour.high) {
+              breakoutState = 'Bullish';
+            } else if (currentPrice < prevHour.low) {
+              breakoutState = 'Bearish';
+            }
+            
+            // Streak sorting score: prioritize highest active streak, followed by trend density
+            let streakScore = Math.max(buyStreak, sellStreak) * 10 + (upHours / (totalChecked || 1));
+
+            streaksData.push({
+              symbol,
+              buyStreak,
+              sellStreak,
+              upHours,
+              totalChecked,
+              breakoutState,
+              streakScore,
               volume24h: parseFloat(coin.quoteVolume)
             });
           }
@@ -728,6 +897,53 @@
 
       // Update cached ranks for comparison in next cycle
       previousExplodingRanks = newRanks;
+
+      // 5. Render Trend Streaks & Breakouts
+      streaksData.sort((a, b) => b.streakScore - a.streakScore);
+      let topStreaks = streaksData.slice(0, 8);
+
+      let shtml = '';
+      if (topStreaks.length === 0) {
+        shtml = '<tr><td colspan="5" style="text-align: center;" class="small">No active data.</td></tr>';
+      } else {
+        topStreaks.forEach(c => {
+          let streakHtml = '';
+          if (c.buyStreak > 0) {
+            streakHtml = `<span class="streak-buy">🔥 ${c.buyStreak} UPHOURS</span>`;
+          } else if (c.sellStreak > 0) {
+            streakHtml = `<span class="streak-sell">🩸 ${c.sellStreak} DOWNHOURS</span>`;
+          } else {
+            streakHtml = `<span class="small">0 (Neutral)</span>`;
+          }
+
+          let ratioClass = 'small';
+          let ratioPct = c.upHours / (c.totalChecked || 1);
+          if (ratioPct >= 0.65) ratioClass = 'positive';
+          else if (ratioPct <= 0.35) ratioClass = 'negative';
+
+          let ratioHtml = `<span class="${ratioClass}" style="font-weight: 500;">${c.upHours}/${c.totalChecked} Up</span>`;
+
+          let breakoutHtml = '';
+          if (c.breakoutState === 'Bullish') {
+            breakoutHtml = `<span class="breakout-buy">▲ Breakout High</span>`;
+          } else if (c.breakoutState === 'Bearish') {
+            breakoutHtml = `<span class="breakout-sell">▼ Breakout Low</span>`;
+          } else {
+            breakoutHtml = `<span class="breakout-none">-</span>`;
+          }
+
+          shtml += `<tr>
+            <td>${getBinanceLink(c.symbol)}</td>
+            <td>${streakHtml}</td>
+            <td>${ratioHtml}</td>
+            <td>${breakoutHtml}</td>
+            <td>${formatVolume(c.volume24h)}</td>
+          </tr>`;
+        });
+      }
+      document.getElementById('streaks').innerHTML = shtml;
+      document.getElementById('streaksLoader').style.display = 'none';
+      document.getElementById('streaksTable').style.display = 'table';
 
       // Clear loaders and display tables
       document.getElementById('gainersLoader').style.display = 'none';
