@@ -662,25 +662,48 @@
 
       // 4. Render Exploding Coins (Micro-Momentum)
       explodingData.sort((a, b) => b.explosionScore - a.explosionScore);
-      let topExploding = explodingData.slice(0, 8);
+      
+      // Calculate ranks for all scanned coins
+      let newRanks = {};
+      explodingData.forEach((c, idx) => {
+        newRanks[c.symbol] = idx + 1;
+      });
 
+      let topExploding = explodingData.slice(0, 8);
       let ehtml = '';
       if (topExploding.length === 0) {
-        ehtml = '<tr><td colspan="6" style="text-align: center;" class="small">No active data.</td></tr>';
+        ehtml = '<tr><td colspan="8" style="text-align: center;" class="small">No active data.</td></tr>';
       } else {
-        topExploding.forEach(c => {
-          // Highlight as Exploding if RVol >= 2.2 and absolute 5m Change >= 0.6%
-          let isExploding = c.rVol >= 2.2 && Math.abs(c.change5m) >= 0.6;
-          // Highlight as Active if RVol >= 1.5 or absolute 5m Change >= 0.4%
-          let isMoving = c.rVol >= 1.5 || Math.abs(c.change5m) >= 0.4;
+        topExploding.forEach((c, idx) => {
+          let currentRank = idx + 1;
+          let prevRank = previousExplodingRanks[c.symbol];
           
-          let stateBadge = '';
-          if (isExploding) {
-            stateBadge = `<span class="badge-exploding">🚨 Exploding</span>`;
-          } else if (isMoving) {
-            stateBadge = `<span class="badge-active">⚡ Active</span>`;
+          let rankChangeHtml = '';
+          if (Object.keys(previousExplodingRanks).length === 0) {
+            // First tick on page load: show neutral dash
+            rankChangeHtml = `<span style="color: var(--text-muted); font-size: 0.8rem;">-</span>`;
+          } else if (prevRank === undefined) {
+            // New entrant into the tracked pool
+            rankChangeHtml = `<span style="color: #00e676; font-size: 0.75rem; font-weight: bold;">★ New</span>`;
           } else {
-            stateBadge = `<span class="small">Stable</span>`;
+            let diff = prevRank - currentRank; // Positive = improved rank (e.g. #10 -> #3 = +7)
+            if (diff > 0) {
+              rankChangeHtml = `<span style="color: #00e676; font-weight: bold;">▲ ${diff}</span>`;
+            } else if (diff < 0) {
+              rankChangeHtml = `<span style="color: #ff1744; font-weight: bold;">▼ ${Math.abs(diff)}</span>`;
+            } else {
+              rankChangeHtml = `<span style="color: var(--text-muted);">-</span>`;
+            }
+          }
+
+          // Direction based on net price change of current candle
+          let dirHtml = '';
+          if (c.change5m >= 0.2) {
+            dirHtml = `<span class="positive" style="font-weight:600;">🚀 PUMP</span>`;
+          } else if (c.change5m <= -0.2) {
+            dirHtml = `<span class="negative" style="font-weight:600;">🩸 DUMP</span>`;
+          } else {
+            dirHtml = `<span class="small" style="font-weight:500;">➔ FLAT</span>`;
           }
 
           let rVolClass = 'vol-normal';
@@ -688,10 +711,12 @@
           else if (c.rVol >= 1.5) rVolClass = 'vol-high';
 
           ehtml += `<tr>
+            <td class="small">${currentRank}</td>
             <td>${getBinanceLink(c.symbol)}</td>
-            <td>${stateBadge}</td>
-            <td class="${c.change5m >= 0 ? 'positive' : 'negative'}">${c.change5m >= 0 ? '+' : ''}${c.change5m.toFixed(2)}%</td>
-            <td class="${c.change15m >= 0 ? 'positive' : 'negative'}">${c.change15m >= 0 ? '+' : ''}${c.change15m.toFixed(2)}%</td>
+            <td>${rankChangeHtml}</td>
+            <td>${dirHtml}</td>
+            <td class="positive" style="font-weight: 500;">${c.range5m.toFixed(2)}%</td>
+            <td style="color: #00e5ff; font-weight: 500;">${c.range15m.toFixed(2)}%</td>
             <td class="${rVolClass}">${c.rVol.toFixed(1)}x</td>
             <td>${formatVolume(c.volume24h)}</td>
           </tr>`;
@@ -700,6 +725,9 @@
       document.getElementById('exploding').innerHTML = ehtml;
       document.getElementById('explodingLoader').style.display = 'none';
       document.getElementById('explodingTable').style.display = 'table';
+
+      // Update cached ranks for comparison in next cycle
+      previousExplodingRanks = newRanks;
 
       // Clear loaders and display tables
       document.getElementById('gainersLoader').style.display = 'none';
