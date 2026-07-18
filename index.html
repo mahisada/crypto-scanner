@@ -413,10 +413,56 @@
     </table>
   </div>
 
+  <!-- Current 1H Movers Panel -->
+  <div class="panel">
+    <div class="panel-title" style="color: #00e5ff;">
+      <span>⚡ Current 1H Top Movers (Absolute Return)</span>
+      <span class="small" style="font-weight: normal; font-size: 0.8rem;">(Top 5 by absolute % change in current 1h candle)</span>
+    </div>
+    <div id="current1hLoader" class="loading-container">
+      <div class="spinner"></div>
+      <div>Analyzing current 1H candle metrics...</div>
+    </div>
+    <table id="current1hTable" style="display: none;">
+      <thead>
+        <tr>
+          <th>Symbol</th>
+          <th>Side</th>
+          <th>1H Change</th>
+          <th>24H Vol</th>
+        </tr>
+      </thead>
+      <tbody id="current1h"></tbody>
+    </table>
+  </div>
+
+  <!-- Previous 1H Movers Panel -->
+  <div class="panel">
+    <div class="panel-title" style="color: #ffb74d;">
+      <span>⌛ Previous 1H Top Movers (Completed Candle)</span>
+      <span class="small" style="font-weight: normal; font-size: 0.8rem;">(Top 5 by absolute % change in previous full 1h candle)</span>
+    </div>
+    <div id="previous1hLoader" class="loading-container">
+      <div class="spinner"></div>
+      <div>Analyzing previous 1H candle metrics...</div>
+    </div>
+    <table id="previous1hTable" style="display: none;">
+      <thead>
+        <tr>
+          <th>Symbol</th>
+          <th>Side</th>
+          <th>Prev 1H Change</th>
+          <th>24H Vol</th>
+        </tr>
+      </thead>
+      <tbody id="previous1h"></tbody>
+    </table>
+  </div>
+
   <!-- Top Movers Ranked Panel -->
   <div class="panel">
     <div class="panel-title momentum">
-      <span>🔥 Ranked Top Movers (TOP_COUNT = 12)</span>
+      <span>🔥 Ranked Top Movers (TOP_COUNT = 10)</span>
       <span class="small" style="font-weight: normal; font-size: 0.8rem;">(Sorted by absolute daily return since 5:30 IST)</span>
     </div>
     <table>
@@ -592,6 +638,8 @@
         document.getElementById('rankedMovers').innerHTML = '<tr><td colspan="6" style="text-align: center;" class="small">No ranked movers.</td></tr>';
         document.getElementById('exploding').innerHTML = '<tr><td colspan="8" style="text-align: center;" class="small">No active data.</td></tr>';
         document.getElementById('streaks').innerHTML = '<tr><td colspan="5" style="text-align: center;" class="small">No active data.</td></tr>';
+        document.getElementById('current1h').innerHTML = '<tr><td colspan="4" style="text-align: center;" class="small">No active data.</td></tr>';
+        document.getElementById('previous1h').innerHTML = '<tr><td colspan="4" style="text-align: center;" class="small">No active data.</td></tr>';
         
         document.getElementById('gainersLoader').style.display = 'none';
         document.getElementById('gainersTable').style.display = 'table';
@@ -601,6 +649,10 @@
         document.getElementById('explodingTable').style.display = 'table';
         document.getElementById('streaksLoader').style.display = 'none';
         document.getElementById('streaksTable').style.display = 'table';
+        document.getElementById('current1hLoader').style.display = 'none';
+        document.getElementById('current1hTable').style.display = 'table';
+        document.getElementById('previous1hLoader').style.display = 'none';
+        document.getElementById('previous1hTable').style.display = 'table';
         return;
       }
 
@@ -611,6 +663,8 @@
       let sessionData = [];
       let explodingData = [];
       let streaksData = [];
+      let current1hData = [];
+      let previous1hData = [];
 
       // Fetch klines in parallel for all filtered coins
       await Promise.all(coins.map(async (coin) => {
@@ -757,6 +811,24 @@
               streakScore,
               volume24h: parseFloat(coin.quoteVolume)
             });
+
+            // 4. Current 1H Change %
+            let cur1hChange = prevHour ? ((currentPrice - hourly[hourly.length - 1].open) / hourly[hourly.length - 1].open) * 100 : 0;
+            current1hData.push({
+              symbol,
+              change: cur1hChange,
+              absChange: Math.abs(cur1hChange),
+              volume24h: parseFloat(coin.quoteVolume)
+            });
+
+            // 5. Previous 1H Change %
+            let prev1hChange = prevHour.open > 0 ? ((prevHour.close - prevHour.open) / prevHour.open) * 100 : 0;
+            previous1hData.push({
+              symbol,
+              change: prev1hChange,
+              absChange: Math.abs(prev1hChange),
+              volume24h: parseFloat(coin.quoteVolume)
+            });
           }
         } catch (e) {
           console.error(`Error fetching klines for ${symbol}:`, e);
@@ -764,8 +836,8 @@
       }));
 
       // Sort by Strategy logic (Top gainers and losers sorted by percent change since 5:30)
-      let gainers = [...sessionData].sort((a, b) => b.change - a.change).slice(0, 12);
-      let losers = [...sessionData].sort((a, b) => a.change - b.change).slice(0, 12);
+      let gainers = [...sessionData].sort((a, b) => b.change - a.change).slice(0, 5);
+      let losers = [...sessionData].sort((a, b) => a.change - b.change).slice(0, 5);
 
       let ghtml = '';
       gainers.forEach(c => {
@@ -809,7 +881,7 @@
 
       // Sort by absolute change descending
       allMovers.sort((a, b) => b.absChange - a.absChange);
-      let rankedMovers = allMovers.slice(0, 12);
+      let rankedMovers = allMovers.slice(0, 10);
 
       let rhtml = '';
       if (rankedMovers.length === 0) {
@@ -828,6 +900,52 @@
         });
       }
       document.getElementById('rankedMovers').innerHTML = rhtml;
+
+      // Render Current 1H Top Movers (Top 5 absolute % change)
+      current1hData.sort((a, b) => b.absChange - a.absChange);
+      let topCurrent1h = current1hData.slice(0, 5);
+      let cur1hHtml = '';
+      if (topCurrent1h.length === 0) {
+        cur1hHtml = '<tr><td colspan="4" style="text-align: center;" class="small">No active data.</td></tr>';
+      } else {
+        topCurrent1h.forEach(c => {
+          let side = c.change >= 0 ? 'BUY' : 'SELL';
+          let sideClass = c.change >= 0 ? 'positive' : 'negative';
+          let sign = c.change >= 0 ? '+' : '';
+          cur1hHtml += `<tr>
+            <td>${getBinanceLink(c.symbol)}</td>
+            <td class="${sideClass}">${side}</td>
+            <td class="${sideClass}">${sign}${c.change.toFixed(2)}%</td>
+            <td>${formatVolume(c.volume24h)}</td>
+          </tr>`;
+        });
+      }
+      document.getElementById('current1h').innerHTML = cur1hHtml;
+      document.getElementById('current1hLoader').style.display = 'none';
+      document.getElementById('current1hTable').style.display = 'table';
+
+      // Render Previous 1H Top Movers (Top 5 absolute % change)
+      previous1hData.sort((a, b) => b.absChange - a.absChange);
+      let topPrev1h = previous1hData.slice(0, 5);
+      let prev1hHtml = '';
+      if (topPrev1h.length === 0) {
+        prev1hHtml = '<tr><td colspan="4" style="text-align: center;" class="small">No active data.</td></tr>';
+      } else {
+        topPrev1h.forEach(c => {
+          let side = c.change >= 0 ? 'BUY' : 'SELL';
+          let sideClass = c.change >= 0 ? 'positive' : 'negative';
+          let sign = c.change >= 0 ? '+' : '';
+          prev1hHtml += `<tr>
+            <td>${getBinanceLink(c.symbol)}</td>
+            <td class="${sideClass}">${side}</td>
+            <td class="${sideClass}">${sign}${c.change.toFixed(2)}%</td>
+            <td>${formatVolume(c.volume24h)}</td>
+          </tr>`;
+        });
+      }
+      document.getElementById('previous1h').innerHTML = prev1hHtml;
+      document.getElementById('previous1hLoader').style.display = 'none';
+      document.getElementById('previous1hTable').style.display = 'table';
 
       // 4. Render Exploding Coins (Micro-Momentum)
       explodingData.sort((a, b) => b.explosionScore - a.explosionScore);
@@ -969,4 +1087,5 @@
 </script>
 </body>
 </html>
+
 
