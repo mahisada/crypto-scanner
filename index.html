@@ -362,54 +362,49 @@
     </div>
   </div>
 
-  <!-- Live Exploding Coins Panel -->
+  <!-- Current 4H Movers Panel -->
   <div class="panel">
-    <div class="panel-title exploding">
-      <span>🚨 Live Exploding Coins (Micro-Momentum)</span>
-      <span class="small" style="font-weight: normal; font-size: 0.8rem;">(Spiking on 5m/15m change & relative volume)</span>
+    <div class="panel-title" style="color: #7c4dff;">
+      <span>⚡ Current 4H Top Movers (Absolute Return)</span>
+      <span class="small" style="font-weight: normal; font-size: 0.8rem;">(Top 5 by absolute % change in current 4h candle)</span>
     </div>
-    <div id="explodingLoader" class="loading-container">
+    <div id="current4hLoader" class="loading-container">
       <div class="spinner"></div>
-      <div>Scanning for real-time explosions...</div>
+      <div>Analyzing current 4H candle metrics...</div>
     </div>
-    <table id="explodingTable" style="display: none;">
+    <table id="current4hTable" style="display: none;">
       <thead>
         <tr>
-          <th>Rank</th>
           <th>Symbol</th>
-          <th>Move</th>
-          <th>Dir</th>
-          <th>5m Range</th>
-          <th>15m Range</th>
-          <th>Volume Surge</th>
+          <th>Side</th>
+          <th>4H Change</th>
           <th>24H Vol</th>
         </tr>
       </thead>
-      <tbody id="exploding"></tbody>
+      <tbody id="current4h"></tbody>
     </table>
   </div>
 
-  <!-- 1H Trend Streaks Panel -->
+  <!-- Previous 4H Movers Panel -->
   <div class="panel">
-    <div class="panel-title streaks">
-      <span>📊 1H Trend Streaks & Breakouts</span>
-      <span class="small" style="font-weight: normal; font-size: 0.8rem;">(Hourly continuity streaks, trend ratios, and candle breakouts)</span>
+    <div class="panel-title" style="color: #ff4081;">
+      <span>⌛ Previous 4H Top Movers (Completed Candle)</span>
+      <span class="small" style="font-weight: normal; font-size: 0.8rem;">(Top 5 by absolute % change in previous full 4h candle)</span>
     </div>
-    <div id="streaksLoader" class="loading-container">
-      <div class="spinner" style="border-left-color: #e040fb;"></div>
-      <div>Analyzing hourly trend continuity...</div>
+    <div id="previous4hLoader" class="loading-container">
+      <div class="spinner"></div>
+      <div>Analyzing previous 4H candle metrics...</div>
     </div>
-    <table id="streaksTable" style="display: none;">
+    <table id="previous4hTable" style="display: none;">
       <thead>
         <tr>
           <th>Symbol</th>
-          <th>Consecutive Streak</th>
-          <th>12H Trend Ratio</th>
-          <th>1H Breakout State</th>
+          <th>Side</th>
+          <th>Prev 4H Change</th>
           <th>24H Vol</th>
         </tr>
       </thead>
-      <tbody id="streaks"></tbody>
+      <tbody id="previous4h"></tbody>
     </table>
   </div>
 
@@ -536,7 +531,6 @@
   // Default list of ignored coins - will be updated from ignored_coins.txt if available
   let ignoredCoins = ["BTCUSDT", "ETCUSDT", "XAUUSDT", "SOLUSDT", "XAGUSDT"];
   const MIN_VOLUME_USDT = 50000000;
-  let previousExplodingRanks = {};
 
   async function loadIgnoredCoins() {
     try {
@@ -620,6 +614,41 @@
     return hourly;
   }
 
+  function get4HCandles(k5) {
+    let candles4h = [];
+    let current4hKey = null;
+    let activeCandle = null;
+    
+    for (let k of k5) {
+      let t = k[0];
+      let open = parseFloat(k[1]);
+      let high = parseFloat(k[2]);
+      let low = parseFloat(k[3]);
+      let close = parseFloat(k[4]);
+      let vol = parseFloat(k[5]);
+      
+      // Group by UTC 4-hour timestamp boundary (4 * 3,600,000 ms)
+      let hourKey = Math.floor(t / 14400000);
+      
+      if (hourKey !== current4hKey) {
+        if (activeCandle !== null) {
+          candles4h.push(activeCandle);
+        }
+        current4hKey = hourKey;
+        activeCandle = { open, high, low, close, volume: vol };
+      } else {
+        activeCandle.high = Math.max(activeCandle.high, high);
+        activeCandle.low = Math.min(activeCandle.low, low);
+        activeCandle.close = close;
+        activeCandle.volume += vol;
+      }
+    }
+    if (activeCandle !== null) {
+      candles4h.push(activeCandle);
+    }
+    return candles4h;
+  }
+
   async function fetchData() {
     try {
       // 1. Fetch Tickers from Binance Futures
@@ -636,8 +665,8 @@
         document.getElementById('gainers').innerHTML = emptyRow;
         document.getElementById('losers').innerHTML = emptyRow;
         document.getElementById('rankedMovers').innerHTML = '<tr><td colspan="6" style="text-align: center;" class="small">No ranked movers.</td></tr>';
-        document.getElementById('exploding').innerHTML = '<tr><td colspan="8" style="text-align: center;" class="small">No active data.</td></tr>';
-        document.getElementById('streaks').innerHTML = '<tr><td colspan="5" style="text-align: center;" class="small">No active data.</td></tr>';
+        document.getElementById('current4h').innerHTML = '<tr><td colspan="4" style="text-align: center;" class="small">No active data.</td></tr>';
+        document.getElementById('previous4h').innerHTML = '<tr><td colspan="4" style="text-align: center;" class="small">No active data.</td></tr>';
         document.getElementById('current1h').innerHTML = '<tr><td colspan="4" style="text-align: center;" class="small">No active data.</td></tr>';
         document.getElementById('previous1h').innerHTML = '<tr><td colspan="4" style="text-align: center;" class="small">No active data.</td></tr>';
         
@@ -645,10 +674,10 @@
         document.getElementById('gainersTable').style.display = 'table';
         document.getElementById('losersLoader').style.display = 'none';
         document.getElementById('losersTable').style.display = 'table';
-        document.getElementById('explodingLoader').style.display = 'none';
-        document.getElementById('explodingTable').style.display = 'table';
-        document.getElementById('streaksLoader').style.display = 'none';
-        document.getElementById('streaksTable').style.display = 'table';
+        document.getElementById('current4hLoader').style.display = 'none';
+        document.getElementById('current4hTable').style.display = 'table';
+        document.getElementById('previous4hLoader').style.display = 'none';
+        document.getElementById('previous4hTable').style.display = 'table';
         document.getElementById('current1hLoader').style.display = 'none';
         document.getElementById('current1hTable').style.display = 'table';
         document.getElementById('previous1hLoader').style.display = 'none';
@@ -661,8 +690,8 @@
       let nyStart = getUTCSessionTime(13, 30);
 
       let sessionData = [];
-      let explodingData = [];
-      let streaksData = [];
+      let current4hData = [];
+      let previous4hData = [];
       let current1hData = [];
       let previous1hData = [];
 
@@ -710,109 +739,39 @@
             });
           }
 
-          // Calculate Exploding (Micro-momentum) metrics
-          if (k5 && k5.length >= 22) {
-            let lastIdx = k5.length - 1;
-            let currentPrice = parseFloat(k5[lastIdx][4]);
-            let open5m = parseFloat(k5[lastIdx][1]);
-            let high5m = parseFloat(k5[lastIdx][2]);
-            let low5m = parseFloat(k5[lastIdx][3]);
-            
-            // 5m range: percentage height of the current 5m candle
-            let range5m = low5m > 0 ? ((high5m - low5m) / low5m) * 100 : 0;
-            let change5m = open5m > 0 ? ((currentPrice - open5m) / open5m) * 100 : 0;
+          // Reconstructing 4H candles from 5m data for 4H movers
+          let candles4h = get4HCandles(k5);
+          if (candles4h && candles4h.length >= 2) {
+            let currentPrice = parseFloat(k5[k5.length - 1][4]);
+            let prev4h = candles4h[candles4h.length - 2];
+            let cur4h = candles4h[candles4h.length - 1];
 
-            // 15m range: high-low spread over the last 3 candles (15 mins)
-            let candles15m = k5.slice(Math.max(0, lastIdx - 2), lastIdx + 1);
-            let high15m = Math.max(...candles15m.map(k => parseFloat(k[2])));
-            let low15m = Math.min(...candles15m.map(k => parseFloat(k[3])));
-            let range15m = low15m > 0 ? ((high15m - low15m) / low15m) * 100 : 0;
-
-            // Calculate historical 5m volume average (past 20 completed candles)
-            let volSum = 0;
-            let volCount = 0;
-            for (let i = lastIdx - 20; i < lastIdx; i++) {
-              volSum += parseFloat(k5[i][5]); // Volume is at index 5 in Binance klines
-              volCount++;
-            }
-            let avgVol5m = volCount > 0 ? (volSum / volCount) : 1;
-            let curVol5m = parseFloat(k5[lastIdx][5]);
-            let rVol = avgVol5m > 0 ? (curVol5m / avgVol5m) : 0;
-
-            // Explosion Score = 5m range % * RVol
-            let explosionScore = range5m * rVol;
-
-            explodingData.push({
+            // Current 4H Change %
+            let cur4hChange = cur4h ? ((currentPrice - cur4h.open) / cur4h.open) * 100 : 0;
+            current4hData.push({
               symbol,
-              change5m,
-              range5m,
-              range15m,
-              rVol,
-              explosionScore,
+              change: cur4hChange,
+              absChange: Math.abs(cur4hChange),
+              volume24h: parseFloat(coin.quoteVolume)
+            });
+
+            // Previous 4H Change %
+            let prev4hChange = prev4h.open > 0 ? ((prev4h.close - prev4h.open) / prev4h.open) * 100 : 0;
+            previous4hData.push({
+              symbol,
+              change: prev4hChange,
+              absChange: Math.abs(prev4hChange),
               volume24h: parseFloat(coin.quoteVolume)
             });
           }
 
-          // Calculate Trend Streaks & Breakouts (Reconstructing 1H candles from 5m data)
+          // Reconstructing 1H candles from 5m data for 1H movers
           let hourly = getHourlyCandles(k5);
           if (hourly && hourly.length >= 2) {
-            let buyStreak = 0;
-            let sellStreak = 0;
-            
-            // 1. Calculate consecutive close streaks
-            // Consecutive buy streak
-            for (let i = hourly.length - 1; i > 0; i--) {
-              if (hourly[i].close > hourly[i-1].close) {
-                buyStreak++;
-              } else {
-                break;
-              }
-            }
-            // Consecutive sell streak
-            for (let i = hourly.length - 1; i > 0; i--) {
-              if (hourly[i].close < hourly[i-1].close) {
-                sellStreak++;
-              } else {
-                break;
-              }
-            }
-            
-            // 2. Calculate 12H Trend Ratio
-            let upHours = 0;
-            let lookback = Math.min(12, hourly.length - 1);
-            let totalChecked = 0;
-            for (let i = hourly.length - 1; i > hourly.length - 1 - lookback && i > 0; i--) {
-              if (hourly[i].close > hourly[i-1].close) {
-                upHours++;
-              }
-              totalChecked++;
-            }
-            
-            // 3. 1H Breakout State (Current price vs previous hour's High/Low boundaries)
             let currentPrice = parseFloat(k5[k5.length - 1][4]);
             let prevHour = hourly[hourly.length - 2];
-            let breakoutState = 'None';
-            if (currentPrice > prevHour.high) {
-              breakoutState = 'Bullish';
-            } else if (currentPrice < prevHour.low) {
-              breakoutState = 'Bearish';
-            }
-            
-            // Streak sorting score: prioritize highest active streak, followed by trend density
-            let streakScore = Math.max(buyStreak, sellStreak) * 10 + (upHours / (totalChecked || 1));
 
-            streaksData.push({
-              symbol,
-              buyStreak,
-              sellStreak,
-              upHours,
-              totalChecked,
-              breakoutState,
-              streakScore,
-              volume24h: parseFloat(coin.quoteVolume)
-            });
-
-            // 4. Current 1H Change %
+            // Current 1H Change %
             let cur1hChange = prevHour ? ((currentPrice - hourly[hourly.length - 1].open) / hourly[hourly.length - 1].open) * 100 : 0;
             current1hData.push({
               symbol,
@@ -821,7 +780,7 @@
               volume24h: parseFloat(coin.quoteVolume)
             });
 
-            // 5. Previous 1H Change %
+            // Previous 1H Change %
             let prev1hChange = prevHour.open > 0 ? ((prevHour.close - prevHour.open) / prevHour.open) * 100 : 0;
             previous1hData.push({
               symbol,
@@ -901,6 +860,52 @@
       }
       document.getElementById('rankedMovers').innerHTML = rhtml;
 
+      // Render Current 4H Top Movers (Top 5 absolute % change)
+      current4hData.sort((a, b) => b.absChange - a.absChange);
+      let topCurrent4h = current4hData.slice(0, 5);
+      let cur4hHtml = '';
+      if (topCurrent4h.length === 0) {
+        cur4hHtml = '<tr><td colspan="4" style="text-align: center;" class="small">No active data.</td></tr>';
+      } else {
+        topCurrent4h.forEach(c => {
+          let side = c.change >= 0 ? 'BUY' : 'SELL';
+          let sideClass = c.change >= 0 ? 'positive' : 'negative';
+          let sign = c.change >= 0 ? '+' : '';
+          cur4hHtml += `<tr>
+            <td>${getBinanceLink(c.symbol)}</td>
+            <td class="${sideClass}">${side}</td>
+            <td class="${sideClass}">${sign}${c.change.toFixed(2)}%</td>
+            <td>${formatVolume(c.volume24h)}</td>
+          </tr>`;
+        });
+      }
+      document.getElementById('current4h').innerHTML = cur4hHtml;
+      document.getElementById('current4hLoader').style.display = 'none';
+      document.getElementById('current4hTable').style.display = 'table';
+
+      // Render Previous 4H Top Movers (Top 5 absolute % change)
+      previous4hData.sort((a, b) => b.absChange - a.absChange);
+      let topPrev4h = previous4hData.slice(0, 5);
+      let prev4hHtml = '';
+      if (topPrev4h.length === 0) {
+        prev4hHtml = '<tr><td colspan="4" style="text-align: center;" class="small">No active data.</td></tr>';
+      } else {
+        topPrev4h.forEach(c => {
+          let side = c.change >= 0 ? 'BUY' : 'SELL';
+          let sideClass = c.change >= 0 ? 'positive' : 'negative';
+          let sign = c.change >= 0 ? '+' : '';
+          prev4hHtml += `<tr>
+            <td>${getBinanceLink(c.symbol)}</td>
+            <td class="${sideClass}">${side}</td>
+            <td class="${sideClass}">${sign}${c.change.toFixed(2)}%</td>
+            <td>${formatVolume(c.volume24h)}</td>
+          </tr>`;
+        });
+      }
+      document.getElementById('previous4h').innerHTML = prev4hHtml;
+      document.getElementById('previous4hLoader').style.display = 'none';
+      document.getElementById('previous4hTable').style.display = 'table';
+
       // Render Current 1H Top Movers (Top 5 absolute % change)
       current1hData.sort((a, b) => b.absChange - a.absChange);
       let topCurrent1h = current1hData.slice(0, 5);
@@ -947,122 +952,6 @@
       document.getElementById('previous1hLoader').style.display = 'none';
       document.getElementById('previous1hTable').style.display = 'table';
 
-      // 4. Render Exploding Coins (Micro-Momentum)
-      explodingData.sort((a, b) => b.explosionScore - a.explosionScore);
-      
-      // Calculate ranks for all scanned coins
-      let newRanks = {};
-      explodingData.forEach((c, idx) => {
-        newRanks[c.symbol] = idx + 1;
-      });
-
-      let topExploding = explodingData.slice(0, 8);
-      let ehtml = '';
-      if (topExploding.length === 0) {
-        ehtml = '<tr><td colspan="8" style="text-align: center;" class="small">No active data.</td></tr>';
-      } else {
-        topExploding.forEach((c, idx) => {
-          let currentRank = idx + 1;
-          let prevRank = previousExplodingRanks[c.symbol];
-          
-          let rankChangeHtml = '';
-          if (Object.keys(previousExplodingRanks).length === 0) {
-            // First tick on page load: show neutral dash
-            rankChangeHtml = `<span style="color: var(--text-muted); font-size: 0.8rem;">-</span>`;
-          } else if (prevRank === undefined) {
-            // New entrant into the tracked pool
-            rankChangeHtml = `<span style="color: #00e676; font-size: 0.75rem; font-weight: bold;">★ New</span>`;
-          } else {
-            let diff = prevRank - currentRank; // Positive = improved rank (e.g. #10 -> #3 = +7)
-            if (diff > 0) {
-              rankChangeHtml = `<span style="color: #00e676; font-weight: bold;">▲ ${diff}</span>`;
-            } else if (diff < 0) {
-              rankChangeHtml = `<span style="color: #ff1744; font-weight: bold;">▼ ${Math.abs(diff)}</span>`;
-            } else {
-              rankChangeHtml = `<span style="color: var(--text-muted);">-</span>`;
-            }
-          }
-
-          // Direction based on net price change of current candle
-          let dirHtml = '';
-          if (c.change5m >= 0.2) {
-            dirHtml = `<span class="positive" style="font-weight:600;">🚀 PUMP</span>`;
-          } else if (c.change5m <= -0.2) {
-            dirHtml = `<span class="negative" style="font-weight:600;">🩸 DUMP</span>`;
-          } else {
-            dirHtml = `<span class="small" style="font-weight:500;">➔ FLAT</span>`;
-          }
-
-          let rVolClass = 'vol-normal';
-          if (c.rVol >= 3.0) rVolClass = 'vol-surge';
-          else if (c.rVol >= 1.5) rVolClass = 'vol-high';
-
-          ehtml += `<tr>
-            <td class="small">${currentRank}</td>
-            <td>${getBinanceLink(c.symbol)}</td>
-            <td>${rankChangeHtml}</td>
-            <td>${dirHtml}</td>
-            <td class="positive" style="font-weight: 500;">${c.range5m.toFixed(2)}%</td>
-            <td style="color: #00e5ff; font-weight: 500;">${c.range15m.toFixed(2)}%</td>
-            <td class="${rVolClass}">${c.rVol.toFixed(1)}x</td>
-            <td>${formatVolume(c.volume24h)}</td>
-          </tr>`;
-        });
-      }
-      document.getElementById('exploding').innerHTML = ehtml;
-      document.getElementById('explodingLoader').style.display = 'none';
-      document.getElementById('explodingTable').style.display = 'table';
-
-      // Update cached ranks for comparison in next cycle
-      previousExplodingRanks = newRanks;
-
-      // 5. Render Trend Streaks & Breakouts
-      streaksData.sort((a, b) => b.streakScore - a.streakScore);
-      let topStreaks = streaksData.slice(0, 8);
-
-      let shtml = '';
-      if (topStreaks.length === 0) {
-        shtml = '<tr><td colspan="5" style="text-align: center;" class="small">No active data.</td></tr>';
-      } else {
-        topStreaks.forEach(c => {
-          let streakHtml = '';
-          if (c.buyStreak > 0) {
-            streakHtml = `<span class="streak-buy">🔥 ${c.buyStreak} UPHOURS</span>`;
-          } else if (c.sellStreak > 0) {
-            streakHtml = `<span class="streak-sell">🩸 ${c.sellStreak} DOWNHOURS</span>`;
-          } else {
-            streakHtml = `<span class="small">0 (Neutral)</span>`;
-          }
-
-          let ratioClass = 'small';
-          let ratioPct = c.upHours / (c.totalChecked || 1);
-          if (ratioPct >= 0.65) ratioClass = 'positive';
-          else if (ratioPct <= 0.35) ratioClass = 'negative';
-
-          let ratioHtml = `<span class="${ratioClass}" style="font-weight: 500;">${c.upHours}/${c.totalChecked} Up</span>`;
-
-          let breakoutHtml = '';
-          if (c.breakoutState === 'Bullish') {
-            breakoutHtml = `<span class="breakout-buy">▲ Breakout High</span>`;
-          } else if (c.breakoutState === 'Bearish') {
-            breakoutHtml = `<span class="breakout-sell">▼ Breakout Low</span>`;
-          } else {
-            breakoutHtml = `<span class="breakout-none">-</span>`;
-          }
-
-          shtml += `<tr>
-            <td>${getBinanceLink(c.symbol)}</td>
-            <td>${streakHtml}</td>
-            <td>${ratioHtml}</td>
-            <td>${breakoutHtml}</td>
-            <td>${formatVolume(c.volume24h)}</td>
-          </tr>`;
-        });
-      }
-      document.getElementById('streaks').innerHTML = shtml;
-      document.getElementById('streaksLoader').style.display = 'none';
-      document.getElementById('streaksTable').style.display = 'table';
-
       // Clear loaders and display tables
       document.getElementById('gainersLoader').style.display = 'none';
       document.getElementById('gainersTable').style.display = 'table';
@@ -1087,5 +976,4 @@
 </script>
 </body>
 </html>
-
 
