@@ -4,11 +4,11 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Momentum Scanner PRO</title>
-  <!-- Modern Inter Font -->
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  
+
   <style>
     :root {
       --bg-gradient: linear-gradient(135deg, #090810, #120e25, #05040a);
@@ -95,7 +95,6 @@
       100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0, 230, 118, 0); }
     }
 
-    /* Ignored coins list panel */
     .ignore-panel {
       background: var(--card-bg);
       backdrop-filter: blur(12px);
@@ -134,7 +133,6 @@
       letter-spacing: 0.5px;
     }
 
-    /* Card Panels */
     .panel {
       background: var(--card-bg);
       backdrop-filter: blur(12px);
@@ -159,6 +157,11 @@
     .panel-title.losers { color: var(--negative-neon); }
     .panel-title.momentum { color: var(--primary-neon); }
 
+    .panel-title.exploding {
+      color: #ff9100;
+      text-shadow: 0 0 10px rgba(255, 145, 0, 0.2);
+    }
+
     table {
       width: 100%;
       border-collapse: collapse;
@@ -178,6 +181,7 @@
       font-size: 0.75rem;
       letter-spacing: 0.5px;
       user-select: none;
+      white-space: nowrap;
     }
 
     th.sortable:hover {
@@ -239,11 +243,6 @@
       border-left-color: var(--primary-neon);
       animation: spin 1s linear infinite;
       margin-bottom: 16px;
-    }
-
-    .panel-title.exploding {
-      color: #ff9100;
-      text-shadow: 0 0 10px rgba(255, 145, 0, 0.2);
     }
 
     .badge-exploding {
@@ -340,11 +339,68 @@
       0% { transform: rotate(0deg); }
       100% { transform: rotate(360deg); }
     }
-  </style>
-</head>
-<body>
+  
+    .history-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 0 0 10px 0;
+    }
 
+    .history-btn {
+      border: 1px solid rgba(0, 229, 255, 0.25);
+      background: rgba(0, 229, 255, 0.08);
+      color: #00e5ff;
+      padding: 8px 12px;
+      border-radius: 7px;
+      font-family: inherit;
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .history-btn.secondary {
+      border-color: rgba(255, 255, 255, 0.12);
+      background: rgba(255, 255, 255, 0.05);
+      color: #ffffff;
+    }
+
+    .history-btn.pdf {
+      border-color: rgba(0, 230, 118, 0.25);
+      background: rgba(0, 230, 118, 0.08);
+      color: #00e676;
+    }
+
+    .history-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .history-status {
+      margin-bottom: 12px;
+    }
+
+    @media (max-width: 600px) {
+      .history-controls {
+        flex-direction: column;
+      }
+
+      .history-btn {
+        width: 100%;
+      }
+    }
+
+  </style>
+
+  <!-- PDF generation for Daily 5M Momentum History -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.3/jspdf.plugin.autotable.min.js"></script>
+
+</head>
+
+<body>
 <div class="container">
+
   <header>
     <h1>🚀 Momentum Scanner PRO</h1>
     <div class="subtitle">Live Strategy Scanned Movers & Structure</div>
@@ -360,6 +416,55 @@
     <div class="ignore-tags" id="ignoredTags">
       <span class="small">Loading settings...</span>
     </div>
+  </div>
+
+  <!-- NEW: 1-Minute Sudden Spike Panel -->
+  <div class="panel">
+    <div class="panel-title exploding">
+      <span>🔥 5-Minute Momentum Spikes</span>
+      <span class="small" style="font-weight: normal; font-size: 0.8rem;">
+        (Last 12 completed 5M candles + 60-minute memory, Latest first, Range ≥ 4%)
+      </span>
+    </div>
+
+    <div class="history-controls">
+      <button id="showHistoryBtn" class="history-btn" onclick="showTodayHistory()">
+        📊 Today's History
+      </button>
+      <button id="backfillHistoryBtn" class="history-btn secondary" onclick="backfillTodayHistory()">
+        🔄 Backfill 5:30 AM IST
+      </button>
+      <button id="downloadPdfBtn" class="history-btn pdf" onclick="downloadTodayHistoryPDF()">
+        📥 Download Today's PDF
+      </button>
+    </div>
+
+    <div id="historyStatus" class="small history-status">
+      Today's history is built incrementally in this browser.
+    </div>
+
+    <div id="fiveMinSpikeLoader" class="loading-container">
+      <div class="spinner"></div>
+      <div>Scanning completed 5-minute candles...</div>
+    </div>
+
+    <table id="fiveMinSpikeTable" style="display: none;">
+      <thead>
+        <tr>
+          <th>Rank</th>
+          <th>Symbol</th>
+          <th>5M Range</th>
+          <th>Direction</th>
+          <th>Open</th>
+          <th>High</th>
+          <th>Low</th>
+          <th>Close</th>
+          <th>Candle Time</th>
+          <th>Age</th>
+        </tr>
+      </thead>
+      <tbody id="fiveMinSpikes"></tbody>
+    </table>
   </div>
 
   <!-- Current 4H Movers Panel -->
@@ -525,22 +630,69 @@
       <tbody id="losers"></tbody>
     </table>
   </div>
+
 </div>
 
 <script>
   // Default list of ignored coins - will be updated from ignored_coins.txt if available
   let ignoredCoins = ["BTCUSDT", "ETCUSDT", "XAUUSDT", "SOLUSDT", "XAGUSDT"];
+
   const MIN_VOLUME_USDT = 50000000;
 
-  async function loadIgnoredCoins() {
+  // 5-minute momentum-spike settings
+  const FIVE_MIN_RANGE_THRESHOLD = 4.0;
+  const FIVE_MIN_LOOKBACK_CANDLES = 12;
+  const FIVE_MIN_MEMORY_MINUTES = 60;
+  const MAX_FIVE_MIN_SPIKES = 20;
+  const FIVE_MIN_MEMORY_KEY = 'momentumScanner_5m_spikes_v1';
+  const DAILY_HISTORY_KEY = 'momentumScanner_5m_daily_history_v1';
+  const DAILY_HISTORY_RETENTION_DAYS = 7;
+
+  // Prevent a slow/stalled network request from keeping the whole scanner
+  // on the loading screen indefinitely.
+  async function fetchJSONWithTimeout(url, timeoutMs = 10000) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+
     try {
-      let response = await fetch('./ignored_coins.txt');
+      const response = await fetch(url, {
+        signal: controller.signal,
+        cache: 'no-store'
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status} for ${url}`);
+      }
+
+      return await response.json();
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  async function loadIgnoredCoins() {
+
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 3000);
+
+      let response;
+      try {
+        response = await fetch('./ignored_coins.txt', {
+          signal: controller.signal,
+          cache: 'no-store'
+        });
+      } finally {
+        clearTimeout(timer);
+      }
+
       if (response.ok) {
         let text = await response.text();
+
         let parsed = text.split('\n')
           .map(line => line.trim().toUpperCase())
           .filter(line => line && !line.startsWith('#'));
-        
+
         if (parsed.length > 0) {
           // Normalize names: e.g. BTCUSDT, B-ETC_USDT -> BTCUSDT, ETCUSDT
           ignoredCoins = parsed.map(sym => sym.replace('B-', '').replace('_', ''));
@@ -550,10 +702,10 @@
     } catch (e) {
       console.log("Could not load ignored_coins.txt, using defaults:", e);
     }
-    
-    // Render ignored coins tags
+
     let tagsHtml = ignoredCoins.map(coin => `<span class="tag">${coin}</span>`).join('');
-    document.getElementById('ignoredTags').innerHTML = tagsHtml || '<span class="small">None</span>';
+    document.getElementById('ignoredTags').innerHTML =
+      tagsHtml || '<span class="small">None</span>';
   }
 
   function getStartTime() {
@@ -561,17 +713,31 @@
     let istOffset = 5.5 * 60 * 60 * 1000;
     let utc = now.getTime() + now.getTimezoneOffset() * 60000;
     let ist = new Date(utc + istOffset);
+
     ist.setHours(5, 30, 0, 0);
+
     return ist.getTime();
   }
 
   function getUTCSessionTime(hour, minute) {
     let now = new Date();
-    return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), hour, minute, 0, 0);
+
+    return Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate(),
+      hour,
+      minute,
+      0,
+      0
+    );
   }
 
   function formatVolume(v) {
-    if (v >= 1000000000) return (v / 1000000000).toFixed(2) + 'B';
+    if (v >= 1000000000) {
+      return (v / 1000000000).toFixed(2) + 'B';
+    }
+
     return (v / 1000000).toFixed(1) + 'M';
   }
 
@@ -583,7 +749,7 @@
     let hourly = [];
     let currentHourKey = null;
     let activeCandle = null;
-    
+
     for (let k of k5) {
       let t = k[0];
       let open = parseFloat(k[1]);
@@ -591,16 +757,23 @@
       let low = parseFloat(k[3]);
       let close = parseFloat(k[4]);
       let vol = parseFloat(k[5]);
-      
-      // Group by UTC hour timestamp boundary
+
       let hourKey = Math.floor(t / 3600000);
-      
+
       if (hourKey !== currentHourKey) {
         if (activeCandle !== null) {
           hourly.push(activeCandle);
         }
+
         currentHourKey = hourKey;
-        activeCandle = { open, high, low, close, volume: vol };
+
+        activeCandle = {
+          open,
+          high,
+          low,
+          close,
+          volume: vol
+        };
       } else {
         activeCandle.high = Math.max(activeCandle.high, high);
         activeCandle.low = Math.min(activeCandle.low, low);
@@ -608,9 +781,11 @@
         activeCandle.volume += vol;
       }
     }
+
     if (activeCandle !== null) {
       hourly.push(activeCandle);
     }
+
     return hourly;
   }
 
@@ -618,7 +793,7 @@
     let candles4h = [];
     let current4hKey = null;
     let activeCandle = null;
-    
+
     for (let k of k5) {
       let t = k[0];
       let open = parseFloat(k[1]);
@@ -626,16 +801,23 @@
       let low = parseFloat(k[3]);
       let close = parseFloat(k[4]);
       let vol = parseFloat(k[5]);
-      
-      // Group by UTC 4-hour timestamp boundary (4 * 3,600,000 ms)
+
       let hourKey = Math.floor(t / 14400000);
-      
+
       if (hourKey !== current4hKey) {
         if (activeCandle !== null) {
           candles4h.push(activeCandle);
         }
+
         current4hKey = hourKey;
-        activeCandle = { open, high, low, close, volume: vol };
+
+        activeCandle = {
+          open,
+          high,
+          low,
+          close,
+          volume: vol
+        };
       } else {
         activeCandle.high = Math.max(activeCandle.high, high);
         activeCandle.low = Math.min(activeCandle.low, low);
@@ -643,45 +825,500 @@
         activeCandle.volume += vol;
       }
     }
+
     if (activeCandle !== null) {
       candles4h.push(activeCandle);
     }
+
     return candles4h;
+  }
+
+  function formatCandleTime(timestamp) {
+    return new Date(timestamp).toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  }
+
+  function loadFiveMinSpikeMemory() {
+    try {
+      const raw = localStorage.getItem(FIVE_MIN_MEMORY_KEY);
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (e) {
+      console.warn('Unable to read 5-minute spike memory:', e);
+      return [];
+    }
+  }
+
+  function saveFiveMinSpikeMemory(spikes) {
+    try {
+      localStorage.setItem(
+        FIVE_MIN_MEMORY_KEY,
+        JSON.stringify(spikes)
+      );
+    } catch (e) {
+      console.warn('Unable to save 5-minute spike memory:', e);
+    }
+  }
+
+
+  function getISTDateKey(timestamp = Date.now()) {
+    const ist = new Date(timestamp + (5.5 * 60 * 60 * 1000));
+    return ist.toISOString().slice(0, 10);
+  }
+
+  function getISTDayStart(timestamp = Date.now()) {
+    const ist = new Date(timestamp + (5.5 * 60 * 60 * 1000));
+    ist.setUTCHours(5, 30, 0, 0);
+    return ist.getTime() - (5.5 * 60 * 60 * 1000);
+  }
+
+  function loadDailyHistory() {
+    try {
+      const raw = localStorage.getItem(DAILY_HISTORY_KEY);
+      const parsed = raw ? JSON.parse(raw) : {};
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch (e) {
+      console.warn('Unable to read daily 5-minute history:', e);
+      return {};
+    }
+  }
+
+  function saveDailyHistory(history) {
+    try {
+      localStorage.setItem(DAILY_HISTORY_KEY, JSON.stringify(history));
+    } catch (e) {
+      console.warn('Unable to save daily 5-minute history:', e);
+    }
+  }
+
+  function pruneDailyHistory(history) {
+    const keepFrom = Date.now() - (DAILY_HISTORY_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+    Object.keys(history).forEach(dateKey => {
+      const dayStart = getISTDayStart(
+        Date.parse(dateKey + 'T00:00:00Z')
+      );
+      if (!Number.isFinite(dayStart) || dayStart < keepFrom - 24 * 60 * 60 * 1000) {
+        delete history[dateKey];
+      }
+    });
+    return history;
+  }
+
+  function mergeDailyHistory(newSpikes) {
+    const history = pruneDailyHistory(loadDailyHistory());
+    const todayKey = getISTDateKey();
+
+    if (!Array.isArray(history[todayKey])) {
+      history[todayKey] = [];
+    }
+
+    const byId = new Map();
+    history[todayKey].forEach(s => {
+      if (s && Number.isFinite(Number(s.candleTime))) {
+        byId.set(`${s.symbol}_${s.candleTime}`, s);
+      }
+    });
+
+    newSpikes.forEach(s => {
+      if (s && Number.isFinite(Number(s.candleTime))) {
+        byId.set(`${s.symbol}_${s.candleTime}`, s);
+      }
+    });
+
+    history[todayKey] = Array.from(byId.values())
+      .filter(s => Number(s.candleTime) >= getISTDayStart())
+      .sort((a, b) => {
+        if (b.candleTime !== a.candleTime) {
+          return b.candleTime - a.candleTime;
+        }
+        return Number(b.range) - Number(a.range);
+      });
+
+    saveDailyHistory(history);
+    return history[todayKey];
+  }
+
+  function getTodayDailyHistory() {
+    const history = pruneDailyHistory(loadDailyHistory());
+    const todayKey = getISTDateKey();
+    return Array.isArray(history[todayKey]) ? history[todayKey] : [];
+  }
+
+  function updateHistoryStatus(extra = '') {
+    const count = getTodayDailyHistory().length;
+    const start = new Date(getISTDayStart());
+    const startText = start.toLocaleTimeString('en-IN', {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+    const status = `Today: ${startText} IST → now | ${count} recorded spike${count === 1 ? '' : 's'}${extra ? ' | ' + extra : ''}`;
+    const el = document.getElementById('historyStatus');
+    if (el) el.textContent = status;
+  }
+
+  function showTodayHistory() {
+    const history = getTodayDailyHistory();
+    renderFiveMinSpikes(history, true);
+    updateHistoryStatus();
+  }
+
+  function renderFiveMinSpikes(spikes, showAll = false) {
+    const rows = showAll ? spikes : spikes.slice(0, MAX_FIVE_MIN_SPIKES);
+    let html = '';
+
+    if (rows.length === 0) {
+      html = `
+        <tr>
+          <td colspan="10" style="text-align: center;" class="small">
+            No 5-minute candles with range ≥ ${FIVE_MIN_RANGE_THRESHOLD.toFixed(1)}%
+            recorded for today's history.
+          </td>
+        </tr>`;
+    } else {
+      rows.forEach((c, idx) => {
+        const directionClass = c.direction === 'UP' ? 'positive' : 'negative';
+        const directionSymbol = c.direction === 'UP' ? '🟢 UP' : '🔴 DOWN';
+
+        html += `
+          <tr>
+            <td class="small">${idx + 1}</td>
+            <td>${getBinanceLink(c.symbol)}</td>
+            <td class="vol-surge">${Number(c.range).toFixed(2)}%</td>
+            <td class="${directionClass}">${directionSymbol}</td>
+            <td>${c.open}</td>
+            <td>${c.high}</td>
+            <td>${c.low}</td>
+            <td>${c.close}</td>
+            <td class="small">${formatCandleTime(c.candleTime)}</td>
+            <td class="small">${formatFiveMinSpikeAge(c.candleTime)}</td>
+          </tr>`;
+      });
+    }
+
+    document.getElementById('fiveMinSpikes').innerHTML = html;
+  }
+
+  async function backfillTodayHistory() {
+    const btn = document.getElementById('backfillHistoryBtn');
+    const status = document.getElementById('historyStatus');
+
+    if (btn) btn.disabled = true;
+    if (status) status.textContent = 'Backfilling today from 05:30 AM IST...';
+
+    try {
+      // Use the same current scanner universe: top 50 USDT pairs by
+      // current 24H quote volume, >= $50M, excluding ignored coins.
+      const ticker = await fetchJSONWithTimeout(
+        'https://fapi.binance.com/fapi/v1/ticker/24hr',
+        10000
+      );
+
+      const coins = ticker
+        .filter(c =>
+          c.symbol.endsWith('USDT') &&
+          parseFloat(c.quoteVolume) >= MIN_VOLUME_USDT &&
+          !ignoredCoins.includes(c.symbol)
+        )
+        .sort((a, b) =>
+          parseFloat(b.quoteVolume) - parseFloat(a.quoteVolume)
+        )
+        .slice(0, 50);
+
+      const dayStart = getISTDayStart();
+      const now = Date.now();
+      const allSpikes = [];
+
+      let completed = 0;
+
+      await Promise.all(coins.map(async coin => {
+        try {
+          const k5 = await fetchJSONWithTimeout(
+            `https://fapi.binance.com/fapi/v1/klines?symbol=${coin.symbol}&interval=5m&limit=500`,
+            10000
+          );
+
+          if (Array.isArray(k5)) {
+            k5.forEach(candle => {
+              const candleTime = Number(candle[0]);
+              const closeTime = Number(candle[6]);
+
+              if (
+                candleTime >= dayStart &&
+                closeTime < now
+              ) {
+                const open = parseFloat(candle[1]);
+                const high = parseFloat(candle[2]);
+                const low = parseFloat(candle[3]);
+                const close = parseFloat(candle[4]);
+
+                if (
+                  Number.isFinite(open) &&
+                  Number.isFinite(high) &&
+                  Number.isFinite(low) &&
+                  Number.isFinite(close) &&
+                  low > 0
+                ) {
+                  const range = ((high - low) / low) * 100;
+
+                  if (range >= FIVE_MIN_RANGE_THRESHOLD) {
+                    allSpikes.push({
+                      symbol: coin.symbol,
+                      range,
+                      direction: close >= open ? 'UP' : 'DOWN',
+                      open,
+                      high,
+                      low,
+                      close,
+                      candleTime
+                    });
+                  }
+                }
+              }
+            });
+          }
+        } catch (e) {
+          console.error(`Backfill failed for ${coin.symbol}:`, e);
+        } finally {
+          completed++;
+          if (status) {
+            status.textContent =
+              `Backfilling 05:30 AM IST → now... ${completed}/${coins.length} coins`;
+          }
+        }
+      }));
+
+      mergeDailyHistory(allSpikes);
+      renderFiveMinSpikes(getTodayDailyHistory(), true);
+      updateHistoryStatus(`backfill complete`);
+    } catch (e) {
+      console.error('Daily history backfill failed:', e);
+      if (status) {
+        status.textContent = 'Backfill failed. Existing browser history was not deleted.';
+      }
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  async function downloadTodayHistoryPDF() {
+    const history = getTodayDailyHistory();
+
+    if (history.length === 0) {
+      alert('No 5-minute momentum spike history is available for today.');
+      return;
+    }
+
+    if (!window.jspdf || !window.jspdf.jsPDF) {
+      alert('PDF library is not available. Check your internet connection and reload the page.');
+      return;
+    }
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({
+      orientation: 'landscape',
+      unit: 'mm',
+      format: 'a4'
+    });
+
+    const dateText = new Date().toLocaleDateString('en-IN', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    });
+
+    doc.setFontSize(16);
+    doc.text('5-Minute Momentum Spike History', 14, 14);
+
+    doc.setFontSize(9);
+    doc.text(
+      `Date: ${dateText} | Period: 05:30 AM IST → Now | Range ≥ ${FIVE_MIN_RANGE_THRESHOLD.toFixed(1)}% | Volume filter: ≥ $${(MIN_VOLUME_USDT / 1000000).toFixed(0)}M`,
+      14,
+      21
+    );
+
+    const rows = history.map((c, i) => [
+      i + 1,
+      c.symbol,
+      `${Number(c.range).toFixed(2)}%`,
+      c.direction,
+      Number(c.open).toString(),
+      Number(c.high).toString(),
+      Number(c.low).toString(),
+      Number(c.close).toString(),
+      new Date(c.candleTime).toLocaleString('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        day: '2-digit',
+        month: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      })
+    ]);
+
+    doc.autoTable({
+      startY: 27,
+      head: [['#', 'Symbol', '5M Range', 'Direction', 'Open', 'High', 'Low', 'Close', 'Candle Time (IST)']],
+      body: rows,
+      theme: 'grid',
+      styles: {
+        fontSize: 7,
+        cellPadding: 1.8
+      },
+      headStyles: {
+        fontSize: 7,
+        fontStyle: 'bold'
+      },
+      columnStyles: {
+        0: { cellWidth: 10 },
+        1: { cellWidth: 25 },
+        2: { cellWidth: 20 },
+        3: { cellWidth: 20 },
+        8: { cellWidth: 35 }
+      },
+      didParseCell: function(data) {
+        if (data.section === 'body' && data.column.index === 3) {
+          data.cell.styles.textColor =
+            data.cell.raw === 'UP' ? [0, 150, 80] : [210, 30, 60];
+          data.cell.styles.fontStyle = 'bold';
+        }
+      }
+    });
+
+    const total = history.length;
+    const up = history.filter(c => c.direction === 'UP').length;
+    const down = total - up;
+    const largest = Math.max(...history.map(c => Number(c.range)));
+
+    const finalY = doc.lastAutoTable
+      ? doc.lastAutoTable.finalY + 7
+      : 35;
+
+    doc.setFontSize(8);
+    doc.text(
+      `Total spikes: ${total} | UP: ${up} | DOWN: ${down} | Largest 5M range: ${largest.toFixed(2)}%`,
+      14,
+      finalY
+    );
+
+    doc.save(`5M_Momentum_History_${getISTDateKey()}.pdf`);
+  }
+
+  function mergeFiveMinSpikeMemory(newSpikes) {
+    const now = Date.now();
+    const cutoff = now - (FIVE_MIN_MEMORY_MINUTES * 60 * 1000);
+
+    let memory = loadFiveMinSpikeMemory()
+      .filter(s => Number.isFinite(s.candleTime) && s.candleTime >= cutoff);
+
+    const byId = new Map();
+
+    // Keep existing remembered events first.
+    memory.forEach(s => {
+      byId.set(`${s.symbol}_${s.candleTime}`, s);
+    });
+
+    // Add/update newly discovered events.
+    newSpikes.forEach(s => {
+      byId.set(`${s.symbol}_${s.candleTime}`, s);
+    });
+
+    const merged = Array.from(byId.values())
+      .filter(s => Number.isFinite(s.candleTime) && s.candleTime >= cutoff)
+      .sort((a, b) => {
+        // Latest completed 5M candle first.
+        // Range is only used as a tie-breaker when two events
+        // have the same candle timestamp.
+        if (b.candleTime !== a.candleTime) {
+          return b.candleTime - a.candleTime;
+        }
+        return b.range - a.range;
+      });
+
+    saveFiveMinSpikeMemory(merged);
+    return merged;
+  }
+
+  function formatFiveMinSpikeAge(candleTime) {
+    const ageMinutes = Math.max(
+      0,
+      Math.floor((Date.now() - candleTime) / 60000)
+    );
+
+    if (ageMinutes < 1) return '<1m';
+    if (ageMinutes < 60) return `${ageMinutes}m`;
+
+    return `${Math.floor(ageMinutes / 60)}h`;
   }
 
   async function fetchData() {
     try {
-      // 1. Fetch Tickers from Binance Futures
-      let ticker = await fetch('https://fapi.binance.com/fapi/v1/ticker/24hr').then(r => r.json());
+      // 1. Fetch Binance Futures 24H tickers
+      let ticker = await fetchJSONWithTimeout(
+        'https://fapi.binance.com/fapi/v1/ticker/24hr',
+        10000
+      );
 
-      // 2. Filter using Strategy conditions: USDT pairs, volume >= 90M, and NOT ignored
+      // 2. Filter using existing strategy conditions:
+      //    USDT pairs, volume >= $50M, not ignored.
+      //    Keep the existing top-50 limit for resource efficiency.
       let coins = ticker
-        .filter(c => c.symbol.endsWith('USDT') && parseFloat(c.quoteVolume) >= MIN_VOLUME_USDT && !ignoredCoins.includes(c.symbol))
-        .sort((a, b) => parseFloat(b.quoteVolume) - parseFloat(a.quoteVolume))
-        .slice(0, 50); // Limit to top 50 active instruments for resource efficiency
+        .filter(c =>
+          c.symbol.endsWith('USDT') &&
+          parseFloat(c.quoteVolume) >= MIN_VOLUME_USDT &&
+          !ignoredCoins.includes(c.symbol)
+        )
+        .sort((a, b) =>
+          parseFloat(b.quoteVolume) - parseFloat(a.quoteVolume)
+        )
+        .slice(0, 50);
 
       if (coins.length === 0) {
-        let emptyRow = '<tr><td colspan="6" style="text-align: center;" class="small">No active coins match the strategy criteria.</td></tr>';
+        let emptyRow =
+          '<tr><td colspan="6" style="text-align: center;" class="small">No active coins match the strategy criteria.</td></tr>';
+
         document.getElementById('gainers').innerHTML = emptyRow;
         document.getElementById('losers').innerHTML = emptyRow;
-        document.getElementById('rankedMovers').innerHTML = '<tr><td colspan="6" style="text-align: center;" class="small">No ranked movers.</td></tr>';
-        document.getElementById('current4h').innerHTML = '<tr><td colspan="4" style="text-align: center;" class="small">No active data.</td></tr>';
-        document.getElementById('previous4h').innerHTML = '<tr><td colspan="4" style="text-align: center;" class="small">No active data.</td></tr>';
-        document.getElementById('current1h').innerHTML = '<tr><td colspan="4" style="text-align: center;" class="small">No active data.</td></tr>';
-        document.getElementById('previous1h').innerHTML = '<tr><td colspan="4" style="text-align: center;" class="small">No active data.</td></tr>';
-        
+
+        document.getElementById('rankedMovers').innerHTML =
+          '<tr><td colspan="7" style="text-align: center;" class="small">No ranked movers.</td></tr>';
+
+        document.getElementById('current4h').innerHTML =
+          '<tr><td colspan="4" style="text-align: center;" class="small">No active data.</td></tr>';
+
+        document.getElementById('previous4h').innerHTML =
+          '<tr><td colspan="4" style="text-align: center;" class="small">No active data.</td></tr>';
+
+        document.getElementById('current1h').innerHTML =
+          '<tr><td colspan="4" style="text-align: center;" class="small">No active data.</td></tr>';
+
+        document.getElementById('previous1h').innerHTML =
+          '<tr><td colspan="4" style="text-align: center;" class="small">No active data.</td></tr>';
+
+        document.getElementById('fiveMinSpikes').innerHTML =
+          '<tr><td colspan="10" style="text-align: center;" class="small">No active data.</td></tr>';
+
         document.getElementById('gainersLoader').style.display = 'none';
         document.getElementById('gainersTable').style.display = 'table';
+
         document.getElementById('losersLoader').style.display = 'none';
         document.getElementById('losersTable').style.display = 'table';
+
         document.getElementById('current4hLoader').style.display = 'none';
         document.getElementById('current4hTable').style.display = 'table';
+
         document.getElementById('previous4hLoader').style.display = 'none';
         document.getElementById('previous4hTable').style.display = 'table';
+
         document.getElementById('current1hLoader').style.display = 'none';
         document.getElementById('current1hTable').style.display = 'table';
+
         document.getElementById('previous1hLoader').style.display = 'none';
         document.getElementById('previous1hTable').style.display = 'table';
+
+        document.getElementById('fiveMinSpikeLoader').style.display = 'none';
+        document.getElementById('fiveMinSpikeTable').style.display = 'table';
+
         return;
       }
 
@@ -694,60 +1331,166 @@
       let previous4hData = [];
       let current1hData = [];
       let previous1hData = [];
+      let fiveMinSpikeData = [];
 
-      // Fetch klines in parallel for all filtered coins
+      // Fetch data in parallel for all filtered coins.
+      // 5M, 1D and 5M requests for each coin are launched together.
       await Promise.all(coins.map(async (coin) => {
         let symbol = coin.symbol;
+
         try {
-          // Fetch 5m klines to calculate change since 5:30 IST reference frame
-          let k5 = await fetch(`https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=5m&limit=300`).then(r => r.json());
+          let [k5, k1d, k1m] = await Promise.all([
+            fetchJSONWithTimeout(
+              `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=5m&limit=300`,
+              10000
+            ),
 
-          // Fetch 1d klines to calculate yesterday's daily change
-          let k1d = await fetch(`https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=1d&limit=3`).then(r => r.json());
-          let yesterdayChange = 0.0;
-          if (k1d && k1d.length >= 2) {
-            let yOpen = parseFloat(k1d[k1d.length - 2][1]);
-            let yClose = parseFloat(k1d[k1d.length - 2][4]);
-            if (yOpen > 0) {
-              yesterdayChange = ((yClose - yOpen) / yOpen) * 100;
-            }
-          }
+            fetchJSONWithTimeout(
+              `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=1d&limit=3`,
+              10000
+            )
+          ]);
 
-          let indiaPrice = null, londonPrice = null, nyPrice = null;
+          // ------------------------------------------------------------
+          // 5-MINUTE MOMENTUM SPIKE DETECTOR
+          // ------------------------------------------------------------
+          // Re-use the existing 5M candle data already fetched for this coin.
+          // Inspect the last 12 COMPLETED 5M candles. The current/forming
+          // candle is explicitly excluded.
+          if (k5 && k5.length > 0) {
+            const completed5m = k5
+              .filter(c => Number(c[6]) < Date.now())
+              .slice(-FIVE_MIN_LOOKBACK_CANDLES);
 
-          for (let k of k5) {
-            let t = k[0];
-            if (indiaPrice === null && t >= start) indiaPrice = parseFloat(k[1]);
-            if (londonPrice === null && t >= londonStart) londonPrice = parseFloat(k[1]);
-            if (nyPrice === null && t >= nyStart) nyPrice = parseFloat(k[1]);
-          }
+            completed5m.forEach(candle => {
+              let candleTime = Number(candle[0]);
+              let open5m = parseFloat(candle[1]);
+              let high5m = parseFloat(candle[2]);
+              let low5m = parseFloat(candle[3]);
+              let close5m = parseFloat(candle[4]);
 
-          let current = parseFloat(k5[k5.length - 1][4]);
+              if (
+                Number.isFinite(candleTime) &&
+                Number.isFinite(open5m) &&
+                Number.isFinite(high5m) &&
+                Number.isFinite(low5m) &&
+                Number.isFinite(close5m) &&
+                low5m > 0
+              ) {
+                let range5m =
+                  ((high5m - low5m) / low5m) * 100;
 
-          let indiaChange = indiaPrice ? ((current - indiaPrice) / indiaPrice) * 100 : null;
-          let londonChange = londonPrice ? ((current - londonPrice) / londonPrice) * 100 : null;
-          let nyChange = nyPrice ? ((current - nyPrice) / nyPrice) * 100 : null;
-
-          let distHigh = ((parseFloat(coin.highPrice) - current) / parseFloat(coin.highPrice)) * 100;
-          let distLow = ((current - parseFloat(coin.lowPrice)) / parseFloat(coin.lowPrice)) * 100;
-
-          if (indiaChange !== null) {
-            sessionData.push({
-              symbol, change: indiaChange, london: londonChange, ny: nyChange,
-              volume: parseFloat(coin.quoteVolume), distHigh, distLow,
-              yesterdayChange: yesterdayChange
+                if (range5m >= FIVE_MIN_RANGE_THRESHOLD) {
+                  fiveMinSpikeData.push({
+                    symbol: symbol,
+                    range: range5m,
+                    direction: close5m >= open5m ? 'UP' : 'DOWN',
+                    open: open5m,
+                    high: high5m,
+                    low: low5m,
+                    close: close5m,
+                    candleTime: candleTime
+                  });
+                }
+              }
             });
           }
 
-          // Reconstructing 4H candles from 5m data for 4H movers
-          let candles4h = get4HCandles(k5);
-          if (candles4h && candles4h.length >= 2) {
-            let currentPrice = parseFloat(k5[k5.length - 1][4]);
-            let prev4h = candles4h[candles4h.length - 2];
-            let cur4h = candles4h[candles4h.length - 1];
+          // ------------------------------------------------------------
+          // Existing daily change calculation
+          // ------------------------------------------------------------
+          let yesterdayChange = 0.0;
 
-            // Current 4H Change %
-            let cur4hChange = cur4h ? ((currentPrice - cur4h.open) / cur4h.open) * 100 : 0;
+          if (k1d && k1d.length >= 2) {
+            let yOpen = parseFloat(k1d[k1d.length - 2][1]);
+            let yClose = parseFloat(k1d[k1d.length - 2][4]);
+
+            if (yOpen > 0) {
+              yesterdayChange =
+                ((yClose - yOpen) / yOpen) * 100;
+            }
+          }
+
+          let indiaPrice = null;
+          let londonPrice = null;
+          let nyPrice = null;
+
+          for (let k of k5) {
+            let t = k[0];
+
+            if (indiaPrice === null && t >= start) {
+              indiaPrice = parseFloat(k[1]);
+            }
+
+            if (londonPrice === null && t >= londonStart) {
+              londonPrice = parseFloat(k[1]);
+            }
+
+            if (nyPrice === null && t >= nyStart) {
+              nyPrice = parseFloat(k[1]);
+            }
+          }
+
+          let current =
+            parseFloat(k5[k5.length - 1][4]);
+
+          let indiaChange =
+            indiaPrice
+              ? ((current - indiaPrice) / indiaPrice) * 100
+              : null;
+
+          let londonChange =
+            londonPrice
+              ? ((current - londonPrice) / londonPrice) * 100
+              : null;
+
+          let nyChange =
+            nyPrice
+              ? ((current - nyPrice) / nyPrice) * 100
+              : null;
+
+          let distHigh =
+            ((parseFloat(coin.highPrice) - current) /
+              parseFloat(coin.highPrice)) * 100;
+
+          let distLow =
+            ((current - parseFloat(coin.lowPrice)) /
+              parseFloat(coin.lowPrice)) * 100;
+
+          if (indiaChange !== null) {
+            sessionData.push({
+              symbol,
+              change: indiaChange,
+              london: londonChange,
+              ny: nyChange,
+              volume: parseFloat(coin.quoteVolume),
+              distHigh,
+              distLow,
+              yesterdayChange
+            });
+          }
+
+          // ------------------------------------------------------------
+          // Existing 4H calculations
+          // ------------------------------------------------------------
+          let candles4h = get4HCandles(k5);
+
+          if (candles4h && candles4h.length >= 2) {
+            let currentPrice =
+              parseFloat(k5[k5.length - 1][4]);
+
+            let prev4h =
+              candles4h[candles4h.length - 2];
+
+            let cur4h =
+              candles4h[candles4h.length - 1];
+
+            let cur4hChange =
+              cur4h
+                ? ((currentPrice - cur4h.open) /
+                    cur4h.open) * 100
+                : 0;
+
             current4hData.push({
               symbol,
               change: cur4hChange,
@@ -755,8 +1498,12 @@
               volume24h: parseFloat(coin.quoteVolume)
             });
 
-            // Previous 4H Change %
-            let prev4hChange = prev4h.open > 0 ? ((prev4h.close - prev4h.open) / prev4h.open) * 100 : 0;
+            let prev4hChange =
+              prev4h.open > 0
+                ? ((prev4h.close - prev4h.open) /
+                    prev4h.open) * 100
+                : 0;
+
             previous4hData.push({
               symbol,
               change: prev4hChange,
@@ -765,14 +1512,25 @@
             });
           }
 
-          // Reconstructing 1H candles from 5m data for 1H movers
+          // ------------------------------------------------------------
+          // Existing 1H calculations
+          // ------------------------------------------------------------
           let hourly = getHourlyCandles(k5);
-          if (hourly && hourly.length >= 2) {
-            let currentPrice = parseFloat(k5[k5.length - 1][4]);
-            let prevHour = hourly[hourly.length - 2];
 
-            // Current 1H Change %
-            let cur1hChange = prevHour ? ((currentPrice - hourly[hourly.length - 1].open) / hourly[hourly.length - 1].open) * 100 : 0;
+          if (hourly && hourly.length >= 2) {
+            let currentPrice =
+              parseFloat(k5[k5.length - 1][4]);
+
+            let prevHour =
+              hourly[hourly.length - 2];
+
+            let cur1hChange =
+              prevHour
+                ? ((currentPrice -
+                    hourly[hourly.length - 1].open) /
+                    hourly[hourly.length - 1].open) * 100
+                : 0;
+
             current1hData.push({
               symbol,
               change: cur1hChange,
@@ -780,8 +1538,12 @@
               volume24h: parseFloat(coin.quoteVolume)
             });
 
-            // Previous 1H Change %
-            let prev1hChange = prevHour.open > 0 ? ((prevHour.close - prevHour.open) / prevHour.open) * 100 : 0;
+            let prev1hChange =
+              prevHour.open > 0
+                ? ((prevHour.close - prevHour.open) /
+                    prevHour.open) * 100
+                : 0;
+
             previous1hData.push({
               symbol,
               change: prev1hChange,
@@ -789,16 +1551,28 @@
               volume24h: parseFloat(coin.quoteVolume)
             });
           }
+
         } catch (e) {
-          console.error(`Error fetching klines for ${symbol}:`, e);
+          console.error(
+            `Error fetching klines for ${symbol}:`,
+            e
+          );
         }
       }));
 
-      // Sort by Strategy logic (Top gainers and losers sorted by percent change since 5:30)
-      let gainers = [...sessionData].sort((a, b) => b.change - a.change).slice(0, 5);
-      let losers = [...sessionData].sort((a, b) => a.change - b.change).slice(0, 5);
+      // ------------------------------------------------------------
+      // Existing Strategy Gainers / Losers
+      // ------------------------------------------------------------
+      let gainers = [...sessionData]
+        .sort((a, b) => b.change - a.change)
+        .slice(0, 5);
+
+      let losers = [...sessionData]
+        .sort((a, b) => a.change - b.change)
+        .slice(0, 5);
 
       let ghtml = '';
+
       gainers.forEach(c => {
         ghtml += `<tr>
           <td>${getBinanceLink(c.symbol)}</td>
@@ -809,9 +1583,11 @@
           <td>${formatVolume(c.volume)}</td>
         </tr>`;
       });
+
       document.getElementById('gainers').innerHTML = ghtml;
 
       let lhtml = '';
+
       losers.forEach(c => {
         lhtml += `<tr>
           <td>${getBinanceLink(c.symbol)}</td>
@@ -822,10 +1598,14 @@
           <td>${formatVolume(c.volume)}</td>
         </tr>`;
       });
+
       document.getElementById('losers').innerHTML = lhtml;
 
-      // 3. Combine and rank candidates by absolute return descending (Top 12)
+      // ------------------------------------------------------------
+      // Existing Ranked Top Movers
+      // ------------------------------------------------------------
       let allMovers = [];
+
       sessionData.forEach(c => {
         allMovers.push({
           symbol: c.symbol,
@@ -833,18 +1613,24 @@
           change: c.change,
           yesterdayChange: c.yesterdayChange,
           absChange: Math.abs(c.change),
-          boundaryDistance: c.change >= 0 ? c.distHigh : c.distLow,
+          boundaryDistance:
+            c.change >= 0 ? c.distHigh : c.distLow,
           volume: c.volume
         });
       });
 
-      // Sort by absolute change descending
-      allMovers.sort((a, b) => b.absChange - a.absChange);
-      let rankedMovers = allMovers.slice(0, 10);
+      allMovers.sort(
+        (a, b) => b.absChange - a.absChange
+      );
+
+      let rankedMovers =
+        allMovers.slice(0, 10);
 
       let rhtml = '';
+
       if (rankedMovers.length === 0) {
-        rhtml = '<tr><td colspan="7" style="text-align: center;" class="small">No ranked movers found.</td></tr>';
+        rhtml =
+          '<tr><td colspan="7" style="text-align: center;" class="small">No ranked movers found.</td></tr>';
       } else {
         rankedMovers.forEach((c, idx) => {
           rhtml += `<tr>
@@ -858,19 +1644,59 @@
           </tr>`;
         });
       }
-      document.getElementById('rankedMovers').innerHTML = rhtml;
 
-      // Render Current 4H Top Movers (Top 5 absolute % change)
-      current4hData.sort((a, b) => b.absChange - a.absChange);
-      let topCurrent4h = current4hData.slice(0, 5);
+      document.getElementById('rankedMovers').innerHTML =
+        rhtml;
+
+      // ------------------------------------------------------------
+      // Render 5-Minute Momentum Spikes
+      // ------------------------------------------------------------
+      // Merge newly found spikes with localStorage memory so a spike
+      // remains visible even if the user opens/refreshes the page later.
+      let rememberedFiveMinSpikes =
+        mergeFiveMinSpikeMemory(fiveMinSpikeData);
+
+      // Keep a separate full-day history in browser storage.
+      // Normal refreshes only add the newly discovered completed candles.
+      mergeDailyHistory(fiveMinSpikeData);
+
+      renderFiveMinSpikes(rememberedFiveMinSpikes, false);
+      updateHistoryStatus();
+
+      document.getElementById('fiveMinSpikeLoader').style.display =
+        'none';
+
+      document.getElementById('fiveMinSpikeTable').style.display =
+        'table';
+
+      // ------------------------------------------------------------
+      // Existing Current 4H Top Movers
+      // ------------------------------------------------------------
+      current4hData.sort(
+        (a, b) => b.absChange - a.absChange
+      );
+
+      let topCurrent4h =
+        current4hData.slice(0, 5);
+
       let cur4hHtml = '';
+
       if (topCurrent4h.length === 0) {
-        cur4hHtml = '<tr><td colspan="4" style="text-align: center;" class="small">No active data.</td></tr>';
+        cur4hHtml =
+          '<tr><td colspan="4" style="text-align: center;" class="small">No active data.</td></tr>';
       } else {
         topCurrent4h.forEach(c => {
-          let side = c.change >= 0 ? 'BUY' : 'SELL';
-          let sideClass = c.change >= 0 ? 'positive' : 'negative';
-          let sign = c.change >= 0 ? '+' : '';
+          let side =
+            c.change >= 0 ? 'BUY' : 'SELL';
+
+          let sideClass =
+            c.change >= 0
+              ? 'positive'
+              : 'negative';
+
+          let sign =
+            c.change >= 0 ? '+' : '';
+
           cur4hHtml += `<tr>
             <td>${getBinanceLink(c.symbol)}</td>
             <td class="${sideClass}">${side}</td>
@@ -879,21 +1705,44 @@
           </tr>`;
         });
       }
-      document.getElementById('current4h').innerHTML = cur4hHtml;
-      document.getElementById('current4hLoader').style.display = 'none';
-      document.getElementById('current4hTable').style.display = 'table';
 
-      // Render Previous 4H Top Movers (Top 5 absolute % change)
-      previous4hData.sort((a, b) => b.absChange - a.absChange);
-      let topPrev4h = previous4hData.slice(0, 5);
+      document.getElementById('current4h').innerHTML =
+        cur4hHtml;
+
+      document.getElementById('current4hLoader').style.display =
+        'none';
+
+      document.getElementById('current4hTable').style.display =
+        'table';
+
+      // ------------------------------------------------------------
+      // Existing Previous 4H Top Movers
+      // ------------------------------------------------------------
+      previous4hData.sort(
+        (a, b) => b.absChange - a.absChange
+      );
+
+      let topPrev4h =
+        previous4hData.slice(0, 5);
+
       let prev4hHtml = '';
+
       if (topPrev4h.length === 0) {
-        prev4hHtml = '<tr><td colspan="4" style="text-align: center;" class="small">No active data.</td></tr>';
+        prev4hHtml =
+          '<tr><td colspan="4" style="text-align: center;" class="small">No active data.</td></tr>';
       } else {
         topPrev4h.forEach(c => {
-          let side = c.change >= 0 ? 'BUY' : 'SELL';
-          let sideClass = c.change >= 0 ? 'positive' : 'negative';
-          let sign = c.change >= 0 ? '+' : '';
+          let side =
+            c.change >= 0 ? 'BUY' : 'SELL';
+
+          let sideClass =
+            c.change >= 0
+              ? 'positive'
+              : 'negative';
+
+          let sign =
+            c.change >= 0 ? '+' : '';
+
           prev4hHtml += `<tr>
             <td>${getBinanceLink(c.symbol)}</td>
             <td class="${sideClass}">${side}</td>
@@ -902,21 +1751,44 @@
           </tr>`;
         });
       }
-      document.getElementById('previous4h').innerHTML = prev4hHtml;
-      document.getElementById('previous4hLoader').style.display = 'none';
-      document.getElementById('previous4hTable').style.display = 'table';
 
-      // Render Current 1H Top Movers (Top 5 absolute % change)
-      current1hData.sort((a, b) => b.absChange - a.absChange);
-      let topCurrent1h = current1hData.slice(0, 5);
+      document.getElementById('previous4h').innerHTML =
+        prev4hHtml;
+
+      document.getElementById('previous4hLoader').style.display =
+        'none';
+
+      document.getElementById('previous4hTable').style.display =
+        'table';
+
+      // ------------------------------------------------------------
+      // Existing Current 1H Top Movers
+      // ------------------------------------------------------------
+      current1hData.sort(
+        (a, b) => b.absChange - a.absChange
+      );
+
+      let topCurrent1h =
+        current1hData.slice(0, 5);
+
       let cur1hHtml = '';
+
       if (topCurrent1h.length === 0) {
-        cur1hHtml = '<tr><td colspan="4" style="text-align: center;" class="small">No active data.</td></tr>';
+        cur1hHtml =
+          '<tr><td colspan="4" style="text-align: center;" class="small">No active data.</td></tr>';
       } else {
         topCurrent1h.forEach(c => {
-          let side = c.change >= 0 ? 'BUY' : 'SELL';
-          let sideClass = c.change >= 0 ? 'positive' : 'negative';
-          let sign = c.change >= 0 ? '+' : '';
+          let side =
+            c.change >= 0 ? 'BUY' : 'SELL';
+
+          let sideClass =
+            c.change >= 0
+              ? 'positive'
+              : 'negative';
+
+          let sign =
+            c.change >= 0 ? '+' : '';
+
           cur1hHtml += `<tr>
             <td>${getBinanceLink(c.symbol)}</td>
             <td class="${sideClass}">${side}</td>
@@ -925,21 +1797,44 @@
           </tr>`;
         });
       }
-      document.getElementById('current1h').innerHTML = cur1hHtml;
-      document.getElementById('current1hLoader').style.display = 'none';
-      document.getElementById('current1hTable').style.display = 'table';
 
-      // Render Previous 1H Top Movers (Top 5 absolute % change)
-      previous1hData.sort((a, b) => b.absChange - a.absChange);
-      let topPrev1h = previous1hData.slice(0, 5);
+      document.getElementById('current1h').innerHTML =
+        cur1hHtml;
+
+      document.getElementById('current1hLoader').style.display =
+        'none';
+
+      document.getElementById('current1hTable').style.display =
+        'table';
+
+      // ------------------------------------------------------------
+      // Existing Previous 1H Top Movers
+      // ------------------------------------------------------------
+      previous1hData.sort(
+        (a, b) => b.absChange - a.absChange
+      );
+
+      let topPrev1h =
+        previous1hData.slice(0, 5);
+
       let prev1hHtml = '';
+
       if (topPrev1h.length === 0) {
-        prev1hHtml = '<tr><td colspan="4" style="text-align: center;" class="small">No active data.</td></tr>';
+        prev1hHtml =
+          '<tr><td colspan="4" style="text-align: center;" class="small">No active data.</td></tr>';
       } else {
         topPrev1h.forEach(c => {
-          let side = c.change >= 0 ? 'BUY' : 'SELL';
-          let sideClass = c.change >= 0 ? 'positive' : 'negative';
-          let sign = c.change >= 0 ? '+' : '';
+          let side =
+            c.change >= 0 ? 'BUY' : 'SELL';
+
+          let sideClass =
+            c.change >= 0
+              ? 'positive'
+              : 'negative';
+
+          let sign =
+            c.change >= 0 ? '+' : '';
+
           prev1hHtml += `<tr>
             <td>${getBinanceLink(c.symbol)}</td>
             <td class="${sideClass}">${side}</td>
@@ -948,32 +1843,60 @@
           </tr>`;
         });
       }
-      document.getElementById('previous1h').innerHTML = prev1hHtml;
-      document.getElementById('previous1hLoader').style.display = 'none';
-      document.getElementById('previous1hTable').style.display = 'table';
 
-      // Clear loaders and display tables
-      document.getElementById('gainersLoader').style.display = 'none';
-      document.getElementById('gainersTable').style.display = 'table';
-      document.getElementById('losersLoader').style.display = 'none';
-      document.getElementById('losersTable').style.display = 'table';
+      document.getElementById('previous1h').innerHTML =
+        prev1hHtml;
 
-      document.getElementById('lastUpdated').innerText = 'Last updated: ' + new Date().toLocaleTimeString();
+      document.getElementById('previous1hLoader').style.display =
+        'none';
+
+      document.getElementById('previous1hTable').style.display =
+        'table';
+
+      // ------------------------------------------------------------
+      // Finish loading
+      // ------------------------------------------------------------
+      document.getElementById('gainersLoader').style.display =
+        'none';
+
+      document.getElementById('gainersTable').style.display =
+        'table';
+
+      document.getElementById('losersLoader').style.display =
+        'none';
+
+      document.getElementById('losersTable').style.display =
+        'table';
+
+      document.getElementById('lastUpdated').innerText =
+        'Last updated: ' +
+        new Date().toLocaleTimeString();
+
     } catch (e) {
-      console.error("Error fetching or parsing scanner data:", e);
-      document.getElementById('lastUpdated').innerText = 'Update failed. Retrying...';
+      console.error(
+        "Error fetching or parsing scanner data:",
+        e
+      );
+
+      document.getElementById('lastUpdated').innerText =
+        'Update failed. Retrying...';
     }
   }
 
-  // Load configuration first, then run ticks
+  // Load configuration first, then run scanner.
   async function init() {
+    // Do not block the scanner indefinitely on ignored_coins.txt.
+    // If it loads, use it; if not, the built-in ignored list remains active.
     await loadIgnoredCoins();
+
     fetchData();
+
+    // Existing refresh interval: 60 seconds.
     setInterval(fetchData, 60000);
   }
 
   init();
 </script>
+
 </body>
 </html>
-
